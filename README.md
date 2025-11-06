@@ -1,6 +1,6 @@
 # Steve
 
-[![Demo Video](docs/demo.mp4.mov)](docs/demo.mp4.mov)
+https://github.com/user-attachments/assets/[ASSET-ID-HERE]
 
 We built Cursor for Minecraft. Instead of AI that helps you write code, you get AI agents that actually play the game with you.
 
