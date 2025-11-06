@@ -14,7 +14,9 @@ import java.time.Duration;
 
 public class OpenAIClient {
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-    
+    private static final int MAX_RETRIES = 3;
+    private static final int INITIAL_RETRY_DELAY_MS = 1000; // 1 second
+
     private final HttpClient client;
     private final String apiKey;
 
@@ -32,7 +34,7 @@ public class OpenAIClient {
         }
 
         JsonObject requestBody = buildRequestBody(systemPrompt, userPrompt);
-        
+
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(OPENAI_API_URL))
             .header("Authorization", "Bearer " + apiKey)
@@ -41,27 +43,59 @@ public class OpenAIClient {
             .POST(HttpRequest.BodyPublishers.ofString(requestBody.toString()))
             .build();
 
-        try {
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            if (response.statusCode() != 200) {
-                SteveMod.LOGGER.error("OpenAI API request failed: {} ", response.statusCode());
+        // Retry logic with exponential backoff
+        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 200) {
+                    String responseBody = response.body();
+                    if (responseBody == null || responseBody.isEmpty()) {
+                        SteveMod.LOGGER.error("OpenAI API returned empty response");
+                        return null;
+                    }
+                    return parseResponse(responseBody);
+                }
+
+                // Check if error is retryable (rate limit, server error)
+                if (response.statusCode() == 429 || response.statusCode() >= 500) {
+                    if (attempt < MAX_RETRIES - 1) {
+                        int delayMs = INITIAL_RETRY_DELAY_MS * (int) Math.pow(2, attempt);
+                        SteveMod.LOGGER.warn("OpenAI API request failed with status {}, retrying in {}ms (attempt {}/{})",
+                            response.statusCode(), delayMs, attempt + 1, MAX_RETRIES);
+                        Thread.sleep(delayMs);
+                        continue;
+                    }
+                }
+
+                // Non-retryable error or final attempt
+                SteveMod.LOGGER.error("OpenAI API request failed: {}", response.statusCode());
                 SteveMod.LOGGER.error("Response body: {}", response.body());
                 return null;
-            }
 
-            String responseBody = response.body();
-            if (responseBody == null || responseBody.isEmpty()) {
-                SteveMod.LOGGER.error("OpenAI API returned empty response");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                SteveMod.LOGGER.error("Request interrupted", e);
                 return null;
+            } catch (Exception e) {
+                if (attempt < MAX_RETRIES - 1) {
+                    int delayMs = INITIAL_RETRY_DELAY_MS * (int) Math.pow(2, attempt);
+                    SteveMod.LOGGER.warn("Error communicating with OpenAI API, retrying in {}ms (attempt {}/{})",
+                        delayMs, attempt + 1, MAX_RETRIES, e);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    SteveMod.LOGGER.error("Error communicating with OpenAI API after {} attempts", MAX_RETRIES, e);
+                    return null;
+                }
             }
-
-            return parseResponse(responseBody);
-            
-        } catch (Exception e) {
-            SteveMod.LOGGER.error("Error communicating with OpenAI API", e);
-            return null;
         }
+
+        return null;
     }
 
     private JsonObject buildRequestBody(String systemPrompt, String userPrompt) {
