@@ -2,6 +2,10 @@ package com.steve.ai.agent;
 
 import java.util.*;
 
+// TODO: Will be replaced with real vector embeddings later
+// Currently uses deterministic random embeddings based on text hash
+// This is a placeholder implementation - semantic similarity doesn't actually work
+// Future: Integrate with sentence-transformers or OpenAI embeddings API for real semantic search
 public class VectorStore {
     private final Map<String, EmbeddingEntry> store;
     private final int dimensions;
@@ -29,14 +33,19 @@ public class VectorStore {
             .toList();
     }
     
+    // TODO: Replace with real embeddings - this is a placeholder using hash-based randomness
+    // Real implementation should use:
+    // - OpenAI embeddings API
+    // - Local sentence-transformers model via JNI
+    // - Pre-computed embedding database
     private float[] generateEmbedding(String text) {
         float[] embedding = new float[dimensions];
-        Random random = new Random(text.hashCode());
-        
+        Random random = new Random(text.hashCode()); // Deterministic but not semantic!
+
         for (int i = 0; i < dimensions; i++) {
             embedding[i] = random.nextFloat();
         }
-        
+
         return normalize(embedding);
     }
     
