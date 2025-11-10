@@ -109,7 +109,7 @@ If you want to understand how it works, start in the agent package. That's where
 
 ## Building From Source
 
-Standard Gradle stuff:
+### Linux/Mac:
 
 ```bash
 git clone https://github.com/YuvDwi/Steve.git
@@ -117,7 +117,21 @@ cd Steve
 ./gradlew build
 ```
 
-Output JAR is in `build/libs/`.
+### Windows 11 x64:
+
+**Quick build:**
+```powershell
+.\gradlew.bat build
+```
+
+**Automated release build:**
+```powershell
+.\build-release.ps1
+```
+
+For detailed Windows build instructions, see [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
+
+Output JAR is in `build/libs/steve-ai-mod-1.0.0.jar`.
 
 ## Usage Examples
 
