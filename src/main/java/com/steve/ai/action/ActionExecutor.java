@@ -2,8 +2,7 @@ package com.steve.ai.action;
 
 import com.steve.ai.SteveMod;
 import com.steve.ai.action.actions.*;
-import com.steve.ai.ai.ResponseParser;
-import com.steve.ai.ai.TaskPlanner;
+import com.steve.ai.ai.*;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 
@@ -146,10 +145,8 @@ public class ActionExecutor {
                 steve.getMemory().addAction(currentAction.getDescription());
 
                 if (!result.isSuccess() && result.requiresReplanning()) {
-                    // Action failed, need to replan
-                    if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                        sendToGUI(steve.getSteveName(), "Problem: " + result.getMessage());
-                    }
+                    // Action failed, attempt error recovery
+                    handleErrorRecovery(currentAction.getDescription(), result.getMessage());
                 }
 
                 currentAction = null;
@@ -317,6 +314,73 @@ public class ActionExecutor {
      */
     public boolean isUsingScheduler() {
         return useScheduler;
+    }
+
+    /**
+     * Handle error recovery when an action fails
+     * Uses LLM to replan based on error context
+     */
+    private void handleErrorRecovery(String failedAction, String errorMessage) {
+        try {
+            SteveMod.LOGGER.info("Steve '{}' attempting error recovery for: {}",
+                steve.getSteveName(), failedAction);
+
+            // Notify user
+            if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+                sendToGUI(steve.getSteveName(), "Problem: " + errorMessage + ". Replanning...");
+            }
+
+            // Build error recovery prompt
+            String systemPrompt = PromptBuilder.buildSystemPrompt();
+            String errorPrompt = PromptBuilder.buildErrorRecoveryPrompt(
+                steve,
+                failedAction,
+                errorMessage,
+                currentGoal != null ? currentGoal : "unknown goal"
+            );
+
+            // Get recovery plan from LLM
+            String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
+            String response = null;
+
+            switch (provider) {
+                case "groq" -> response = new GroqClient().sendRequest(systemPrompt, errorPrompt);
+                case "gemini" -> response = new GeminiClient().sendRequest(systemPrompt, errorPrompt);
+                case "openai" -> response = new OpenAIClient().sendRequest(systemPrompt, errorPrompt);
+                default -> response = new GroqClient().sendRequest(systemPrompt, errorPrompt);
+            }
+
+            if (response == null) {
+                SteveMod.LOGGER.error("Failed to get error recovery response");
+                if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+                    sendToGUI(steve.getSteveName(), "I couldn't figure out how to fix this.");
+                }
+                return;
+            }
+
+            // Parse recovery plan
+            ResponseParser.ParsedResponse parsedResponse = ResponseParser.parseAIResponse(response);
+
+            if (parsedResponse == null) {
+                SteveMod.LOGGER.error("Failed to parse error recovery response");
+                return;
+            }
+
+            // Replace task queue with recovery tasks
+            taskQueue.clear();
+            taskQueue.addAll(parsedResponse.getTasks());
+            currentGoal = parsedResponse.getPlan();
+
+            SteveMod.LOGGER.info("Steve '{}' created recovery plan: {} ({} tasks)",
+                steve.getSteveName(), currentGoal, taskQueue.size());
+
+            if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+                sendToGUI(steve.getSteveName(), "New plan: " + currentGoal);
+            }
+
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error during error recovery", e);
+        }
     }
 }
 
