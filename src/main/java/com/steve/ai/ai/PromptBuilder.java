@@ -20,6 +20,10 @@ public class PromptBuilder {
             - attack: {"target": "hostile"} (for any mob/monster)
             - build: {"structure": "house", "blocks": ["oak_planks", "cobblestone", "glass_pane"], "dimensions": [9, 6, 9]}
             - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
+            - craft: {"item": "wooden_pickaxe", "quantity": 1} (crafts items, auto-finds/places crafting table)
+            - store: {"item": "cobblestone"} or {} (stores items in chest, omit item to store all)
+            - retrieve: {"item": "iron_ingot", "quantity": 8} (retrieves items from nearby chest)
+            - place_chest: {} (places chest for storage)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
             
@@ -33,6 +37,9 @@ public class PromptBuilder {
             7. Keep reasoning under 15 words
             8. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
             9. MINING: Can mine any ore (iron, diamond, coal, etc)
+            10. CRAFTING: Checks inventory for ingredients, finds crafting table (or places one)
+            11. STORAGE: Use 'store' when inventory full, 'retrieve' when need items from chest
+            12. INVENTORY MANAGEMENT: Auto-stores items when inventory >90% full
             
             EXAMPLES (copy these formats exactly):
             
@@ -53,7 +60,16 @@ public class PromptBuilder {
             
             Input: "follow me"
             {"reasoning": "Player needs me", "plan": "Follow player", "tasks": [{"action": "follow", "parameters": {"player": "USE_NEARBY_PLAYER_NAME"}}]}
-            
+
+            Input: "craft a wooden pickaxe"
+            {"reasoning": "Crafting wooden pickaxe", "plan": "Craft tool", "tasks": [{"action": "craft", "parameters": {"item": "wooden_pickaxe", "quantity": 1}}]}
+
+            Input: "store my items"
+            {"reasoning": "Storing inventory items", "plan": "Store items", "tasks": [{"action": "store", "parameters": {}}]}
+
+            Input: "get 10 iron ingots from chest"
+            {"reasoning": "Retrieving iron from storage", "plan": "Retrieve iron", "tasks": [{"action": "retrieve", "parameters": {"item": "iron_ingot", "quantity": 10}}]}
+
             CRITICAL: Output ONLY valid JSON. No markdown, no explanations, no line breaks in JSON.
             """;
     }

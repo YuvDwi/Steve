@@ -4,13 +4,19 @@ import com.steve.ai.SteveMod;
 import com.steve.ai.action.ActionResult;
 import com.steve.ai.action.Task;
 import com.steve.ai.entity.SteveEntity;
+import com.steve.ai.util.InventoryHelper;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -174,24 +180,31 @@ public class MineBlockAction extends BaseAction {
         
         if (steve.level().getBlockState(currentTarget).getBlock() == targetBlock) {
             steve.teleportTo(currentTarget.getX() + 0.5, currentTarget.getY(), currentTarget.getZ() + 0.5);
-            
+
             steve.swing(InteractionHand.MAIN_HAND, true);
-            
-            steve.level().destroyBlock(currentTarget, true);
+
+            // Mine block and collect drops into inventory
+            mineBlockAndCollect(currentTarget);
             minedCount++;
             ticksSinceLastMine = 0; // Reset delay timer
-            
-            SteveMod.LOGGER.info("Steve '{}' moved to ore and mined {} at {} - Total: {}/{}", 
-                steve.getSteveName(), targetBlock.getName().getString(), currentTarget, 
+
+            // Check if inventory is getting full
+            if (InventoryHelper.isInventoryFull(steve)) {
+                SteveMod.LOGGER.warn("Steve '{}' inventory is >90% full during mining!", steve.getSteveName());
+                // TODO: Auto-storage will be added in next task
+            }
+
+            SteveMod.LOGGER.info("Steve '{}' moved to ore and mined {} at {} - Total: {}/{}",
+                steve.getSteveName(), targetBlock.getName().getString(), currentTarget,
                 minedCount, targetQuantity);
-            
+
             if (minedCount >= targetQuantity) {
                 steve.setFlying(false);
                 steve.setItemInHand(InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
                 result = ActionResult.success("Mined " + minedCount + " " + targetBlock.getName().getString());
                 return;
             }
-            
+
             currentTarget = null;
         } else {
             currentTarget = null;
@@ -267,20 +280,20 @@ public class MineBlockAction extends BaseAction {
         if (!centerState.isAir() && centerState.getBlock() != Blocks.BEDROCK) {
             steve.teleportTo(centerPos.getX() + 0.5, centerPos.getY(), centerPos.getZ() + 0.5);
             steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(centerPos, true);
+            mineBlockAndCollect(centerPos);
             SteveMod.LOGGER.info("Steve '{}' mining tunnel at {}", steve.getSteveName(), centerPos);
         }
-        
+
         BlockState aboveState = steve.level().getBlockState(abovePos);
         if (!aboveState.isAir() && aboveState.getBlock() != Blocks.BEDROCK) {
             steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(abovePos, true);
+            mineBlockAndCollect(abovePos);
         }
-        
+
         BlockState belowState = steve.level().getBlockState(belowPos);
         if (!belowState.isAir() && belowState.getBlock() != Blocks.BEDROCK) {
             steve.swing(InteractionHand.MAIN_HAND, true);
-            steve.level().destroyBlock(belowPos, true);
+            mineBlockAndCollect(belowPos);
         }
         
         currentTunnelPos = currentTunnelPos.offset(miningDirectionX, 0, miningDirectionZ);
@@ -360,7 +373,7 @@ public class MineBlockAction extends BaseAction {
 
     private Block parseBlock(String blockName) {
         blockName = blockName.toLowerCase().replace(" ", "_");
-        
+
         Map<String, String> resourceToOre = new HashMap<>() {{
             put("iron", "iron_ore");
             put("diamond", "diamond_ore");
@@ -371,17 +384,59 @@ public class MineBlockAction extends BaseAction {
             put("lapis", "lapis_ore");
             put("emerald", "emerald_ore");
         }};
-        
+
         if (resourceToOre.containsKey(blockName)) {
             blockName = resourceToOre.get(blockName);
         }
-        
+
         if (!blockName.contains(":")) {
             blockName = "minecraft:" + blockName;
         }
-        
+
         ResourceLocation resourceLocation = new ResourceLocation(blockName);
         return BuiltInRegistries.BLOCK.get(resourceLocation);
+    }
+
+    /**
+     * Mine a block and collect drops directly into Steve's inventory
+     * Instead of dropping items into world, add them to inventory
+     */
+    private void mineBlockAndCollect(BlockPos pos) {
+        BlockState state = steve.level().getBlockState(pos);
+
+        if (state.isAir() || state.getBlock() == Blocks.BEDROCK) {
+            return;
+        }
+
+        // Get the tool Steve is holding
+        ItemStack tool = steve.getItemInHand(InteractionHand.MAIN_HAND);
+
+        // Get drops from the block
+        if (steve.level() instanceof ServerLevel serverLevel) {
+            // Build loot context
+            LootParams.Builder builder = new LootParams.Builder(serverLevel)
+                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
+                .withParameter(LootContextParams.TOOL, tool)
+                .withOptionalParameter(LootContextParams.BLOCK_ENTITY, steve.level().getBlockEntity(pos));
+
+            List<ItemStack> drops = state.getDrops(builder);
+
+            // Add drops to Steve's inventory
+            for (ItemStack drop : drops) {
+                if (!drop.isEmpty()) {
+                    boolean added = InventoryHelper.addItem(steve, drop.copy());
+                    if (!added) {
+                        // Inventory full - drop to world
+                        Block.popResource(steve.level(), pos, drop);
+                        SteveMod.LOGGER.warn("Steve '{}' inventory full, dropped {} to world",
+                            steve.getSteveName(), drop.getItem().getDescriptionId());
+                    }
+                }
+            }
+        }
+
+        // Destroy the block (no drops, we handled them)
+        steve.level().destroyBlock(pos, false);
     }
 }
 

@@ -166,6 +166,9 @@ public class ActionExecutor {
             case "follow" -> new FollowPlayerAction(steve, task);
             case "gather" -> new GatherResourceAction(steve, task);
             case "build" -> new BuildStructureAction(steve, task);
+            case "store" -> new StoreItemsAction(steve, task);
+            case "retrieve" -> new RetrieveItemsAction(steve, task);
+            case "place_chest" -> new PlaceChestAction(steve, task);
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
                 yield null;
