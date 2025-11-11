@@ -17,15 +17,20 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraftforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
 
 public class SteveEntity extends PathfinderMob {
-    private static final EntityDataAccessor<String> STEVE_NAME = 
+    private static final EntityDataAccessor<String> STEVE_NAME =
         SynchedEntityData.defineId(SteveEntity.class, EntityDataSerializers.STRING);
+
+    // Inventory size: 36 slots (same as player - 27 main + 9 hotbar)
+    private static final int INVENTORY_SIZE = 36;
 
     private String steveName;
     private SteveMemory memory;
     private ActionExecutor actionExecutor;
+    private ItemStackHandler inventory;
     private int tickCounter = 0;
     private boolean isFlying = false;
     private boolean isInvulnerable = false;
@@ -35,8 +40,9 @@ public class SteveEntity extends PathfinderMob {
         this.steveName = "Steve";
         this.memory = new SteveMemory(this);
         this.actionExecutor = new ActionExecutor(this);
+        this.inventory = new ItemStackHandler(INVENTORY_SIZE);
         this.setCustomNameVisible(true);
-        
+
         this.isInvulnerable = true;
         this.setInvulnerable(true);
     }
@@ -89,14 +95,25 @@ public class SteveEntity extends PathfinderMob {
         return this.actionExecutor;
     }
 
+    /**
+     * Get Steve's inventory handler
+     * @return ItemStackHandler with 36 slots
+     */
+    public ItemStackHandler getInventory() {
+        return this.inventory;
+    }
+
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putString("SteveName", this.steveName);
-        
+
         CompoundTag memoryTag = new CompoundTag();
         this.memory.saveToNBT(memoryTag);
         tag.put("Memory", memoryTag);
+
+        // Save inventory
+        tag.put("Inventory", this.inventory.serializeNBT());
     }
 
     @Override
@@ -105,9 +122,14 @@ public class SteveEntity extends PathfinderMob {
         if (tag.contains("SteveName")) {
             this.setSteveName(tag.getString("SteveName"));
         }
-        
+
         if (tag.contains("Memory")) {
             this.memory.loadFromNBT(tag.getCompound("Memory"));
+        }
+
+        // Load inventory
+        if (tag.contains("Inventory")) {
+            this.inventory.deserializeNBT(tag.getCompound("Inventory"));
         }
     }
 
