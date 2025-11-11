@@ -192,6 +192,9 @@ public class RetrieveItemsAction extends BaseAction {
         );
 
         if (itemsRetrieved > 0) {
+            // Update chest memory after retrieving
+            steve.getMemory().updateChest(chestPos);
+
             result = ActionResult.success(
                 "Retrieved " + itemsRetrieved + "x " +
                 targetItem.getDescriptionId() + " from chest"

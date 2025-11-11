@@ -213,6 +213,9 @@ public class StoreItemsAction extends BaseAction {
         itemsStored = InventoryHelper.transferToChest(steve, chestPos, itemToStore);
 
         if (itemsStored > 0) {
+            // Update chest memory after storing
+            steve.getMemory().updateChest(chestPos);
+
             result = ActionResult.success("Stored " + itemsStored + " items in chest at " + chestPos.toShortString());
         } else {
             result = ActionResult.failure("No items to store or chest is full", false);

@@ -156,6 +156,9 @@ public class PlaceChestAction extends BaseAction {
         boolean removed = InventoryHelper.removeItem(steve, Items.CHEST, 1);
 
         if (removed) {
+            // Record the new chest in memory
+            steve.getMemory().recordChest(targetPos);
+
             result = ActionResult.success("Placed chest at " + targetPos.toShortString());
             // Store the chest position in task parameters for retrieval by other actions
             task.getParameters().put("chest_position", targetPos);
