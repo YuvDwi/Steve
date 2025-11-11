@@ -1,6 +1,7 @@
 package com.steve.ai.entity;
 
 import com.steve.ai.action.ActionExecutor;
+import com.steve.ai.action.HungerManager;
 import com.steve.ai.memory.SteveMemory;
 import com.steve.ai.team.Team;
 import com.steve.ai.team.TeamManager;
@@ -33,6 +34,7 @@ public class SteveEntity extends PathfinderMob {
     private String steveName;
     private SteveMemory memory;
     private ActionExecutor actionExecutor;
+    private HungerManager hungerManager;
     private ItemStackHandler inventory;
     private int tickCounter = 0;
     private boolean isFlying = false;
@@ -43,6 +45,7 @@ public class SteveEntity extends PathfinderMob {
         this.steveName = "Steve";
         this.memory = new SteveMemory(this);
         this.actionExecutor = new ActionExecutor(this);
+        this.hungerManager = new HungerManager(this);
         this.inventory = new ItemStackHandler(INVENTORY_SIZE);
         this.setCustomNameVisible(true);
 
@@ -74,9 +77,10 @@ public class SteveEntity extends PathfinderMob {
     @Override
     public void tick() {
         super.tick();
-        
+
         if (!this.level().isClientSide) {
             actionExecutor.tick();
+            hungerManager.tick();
         }
     }
 
@@ -96,6 +100,10 @@ public class SteveEntity extends PathfinderMob {
 
     public ActionExecutor getActionExecutor() {
         return this.actionExecutor;
+    }
+
+    public HungerManager getHungerManager() {
+        return this.hungerManager;
     }
 
     /**

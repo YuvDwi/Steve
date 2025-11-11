@@ -238,6 +238,8 @@ public class ActionExecutor {
             case "store" -> new StoreItemsAction(steve, task);
             case "retrieve" -> new RetrieveItemsAction(steve, task);
             case "place_chest" -> new PlaceChestAction(steve, task);
+            case "farm" -> new FarmAction(steve, task);
+            case "breed" -> new BreedingAction(steve, task);
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
                 yield null;

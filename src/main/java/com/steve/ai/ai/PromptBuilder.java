@@ -32,6 +32,8 @@ public class PromptBuilder {
             - store: {"item": "cobblestone"} or {} (stores items in chest, omit item to store all)
             - retrieve: {"item": "iron_ingot", "quantity": 8} (retrieves items from nearby chest)
             - place_chest: {} (places chest for storage)
+            - farm: {"crop": "wheat", "type": "farm", "amount": 64} (plant/harvest: wheat, carrots, potatoes, beetroot; auto-replants)
+            - breed: {"animal": "cow", "amount": 5} (breed animals: cow, pig, chicken, sheep, horse, llama, rabbit, etc.)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
 
@@ -47,6 +49,9 @@ public class PromptBuilder {
             9. CRAFTING: Auto-checks inventory, finds/places crafting table
             10. STORAGE: Use 'store' when inventory full, 'retrieve' when need items
             11. INVENTORY MANAGEMENT: Auto-stores items when inventory >90% full
+            12. FARMING: Auto-replants crops after harvesting, uses bone meal if available
+            13. BREEDING: Requires appropriate food in inventory (wheat for cows/sheep, carrots for pigs, seeds for chickens)
+            14. HUNGER: Steve automatically eats when hungry, keep food in inventory
 
             EXAMPLES (showing proper reasoning):
 
@@ -77,6 +82,18 @@ public class PromptBuilder {
             Example 7 - Retrieval from storage:
             Input: "get 10 iron ingots from chest"
             {"reasoning": "User needs iron from storage. I'll search for nearby chest with iron ingots and retrieve the requested amount.", "plan": "Retrieve iron from chest", "tasks": [{"action": "retrieve", "parameters": {"item": "iron_ingot", "quantity": 10}}]}
+
+            Example 8 - Farming crops:
+            Input: "farm wheat"
+            {"reasoning": "User wants me to manage wheat farming. I should harvest any mature wheat nearby and replant automatically. If I have bone meal, I can accelerate growth.", "plan": "Harvest and replant wheat crops", "tasks": [{"action": "farm", "parameters": {"crop": "wheat", "type": "farm", "amount": 64}}]}
+
+            Example 9 - Breeding animals:
+            Input: "breed some cows"
+            {"reasoning": "User wants me to breed cows. Cows need wheat to breed. I should check if I have wheat in inventory. Then find two adult cows and feed them to initiate breeding.", "plan": "Breed cows using wheat", "tasks": [{"action": "breed", "parameters": {"animal": "cow", "amount": 5}}]}
+
+            Example 10 - Self-sustaining farm:
+            Input: "start a farm and breed chickens"
+            {"reasoning": "User wants both farming and animal breeding. I'll plant wheat seeds if farmland is available, then breed chickens using seeds. This creates a sustainable food source.", "plan": "Establish farm with crops and animals", "tasks": [{"action": "farm", "parameters": {"crop": "wheat", "type": "farm", "amount": 32}}, {"action": "breed", "parameters": {"animal": "chicken", "amount": 3}}]}
 
             COMMON MISTAKES TO AVOID:
             ❌ DON'T: Start crafting without checking for materials
