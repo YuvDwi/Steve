@@ -2,6 +2,9 @@ package com.steve.ai.entity;
 
 import com.steve.ai.action.ActionExecutor;
 import com.steve.ai.memory.SteveMemory;
+import com.steve.ai.team.Team;
+import com.steve.ai.team.TeamManager;
+import com.steve.ai.team.SteveRole;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -102,6 +105,64 @@ public class SteveEntity extends PathfinderMob {
     public ItemStackHandler getInventory() {
         return this.inventory;
     }
+
+    // ==================== Team Methods ====================
+
+    /**
+     * Get this Steve's team
+     * @return Team or null if not in a team
+     */
+    public Team getTeam() {
+        return TeamManager.getInstance().getTeam(this.steveName);
+    }
+
+    /**
+     * Get this Steve's role
+     * @return SteveRole (GENERALIST if not in team or no role assigned)
+     */
+    public SteveRole getRole() {
+        return TeamManager.getInstance().getRole(this.steveName);
+    }
+
+    /**
+     * Check if this Steve is in a team
+     * @return True if in a team
+     */
+    public boolean isInTeam() {
+        return TeamManager.getInstance().isInTeam(this.steveName);
+    }
+
+    /**
+     * Check if this Steve is the team leader
+     * @return True if Steve is leader of their team
+     */
+    public boolean isTeamLeader() {
+        Team team = getTeam();
+        return team != null && this.steveName.equals(team.getLeaderName());
+    }
+
+    /**
+     * Send a message to team
+     * @param message Message content
+     */
+    public void sendTeamMessage(String message) {
+        Team team = getTeam();
+        if (team != null) {
+            team.broadcastMessage(new Team.TeamMessage(this.steveName, message));
+        }
+    }
+
+    /**
+     * Get recent team messages
+     * @param count Number of messages to retrieve
+     * @return List of team messages
+     */
+    public java.util.List<Team.TeamMessage> getTeamMessages(int count) {
+        Team team = getTeam();
+        return team != null ? team.getMessagesFor(this.steveName) : java.util.Collections.emptyList();
+    }
+
+    // =======================================================
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
