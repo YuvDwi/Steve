@@ -2,6 +2,7 @@ package com.steve.ai.entity;
 
 import com.steve.ai.action.ActionExecutor;
 import com.steve.ai.action.HungerManager;
+import com.steve.ai.dimension.DimensionNavigator;
 import com.steve.ai.memory.SteveMemory;
 import com.steve.ai.team.Team;
 import com.steve.ai.team.TeamManager;

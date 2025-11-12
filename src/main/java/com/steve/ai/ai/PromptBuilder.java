@@ -36,6 +36,7 @@ public class PromptBuilder {
             - place_chest: {} (places chest for storage)
             - farm: {"crop": "wheat", "type": "farm", "amount": 64} (plant/harvest: wheat, carrots, potatoes, beetroot; auto-replants)
             - breed: {"animal": "cow", "amount": 5} (breed animals: cow, pig, chicken, sheep, horse, llama, rabbit, etc.)
+            - build_portal: {} (builds nether portal, requires 10 obsidian + flint & steel)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
 
@@ -57,6 +58,7 @@ public class PromptBuilder {
             15. COMBAT: Auto-equips best armor/weapons/shield; use attack_ranged for distant enemies
             16. RETREAT: Use 'retreat' action when health low or heavily outnumbered
             17. BOSS FIGHTS: Teams coordinate roles automatically (tank, DPS, ranged, support)
+            18. DIMENSIONS: Use build_portal to access Nether; dimension navigation handles safety automatically
 
             EXAMPLES (showing proper reasoning):
 
