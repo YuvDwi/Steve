@@ -5,8 +5,11 @@ import com.steve.ai.action.actions.*;
 import com.steve.ai.ai.*;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
+import com.steve.ai.learning.*;
 
 import java.util.LinkedList;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Queue;
 
 public class ActionExecutor {
@@ -15,11 +18,18 @@ public class ActionExecutor {
     private final Queue<Task> taskQueue;
     private final ActionScheduler scheduler;  // New async action scheduler
 
+    // Learning system components (Phase 2.4)
+    private final FailureTracker failureTracker;
+    private final ActionKnowledgeBase knowledgeBase;
+    private final LearningSystem learningSystem;
+    private final AdaptiveRetryStrategy retryStrategy;
+
     private BaseAction currentAction;  // Legacy: kept for compatibility
     private String currentGoal;
     private int ticksSinceLastAction;
     private BaseAction idleFollowAction;  // Follow player when idle
     private boolean useScheduler = true;  // Enable new scheduler by default
+    private int learningTickCounter = 0; // Periodic learning analysis
 
     public ActionExecutor(SteveEntity steve) {
         this.steve = steve;
@@ -28,6 +38,12 @@ public class ActionExecutor {
         this.scheduler = new ActionScheduler(steve);
         this.ticksSinceLastAction = 0;
         this.idleFollowAction = null;
+
+        // Initialize learning system
+        this.failureTracker = new FailureTracker(steve.getSteveName());
+        this.knowledgeBase = new ActionKnowledgeBase(steve.getSteveName());
+        this.learningSystem = new LearningSystem(steve, failureTracker, knowledgeBase);
+        this.retryStrategy = new AdaptiveRetryStrategy(failureTracker, learningSystem);
     }
     
     private TaskPlanner getTaskPlanner() {
@@ -86,10 +102,30 @@ public class ActionExecutor {
     }
 
     public void tick() {
+        // Periodic learning analysis (every 10 seconds = 200 ticks)
+        learningTickCounter++;
+        if (learningTickCounter >= 200) {
+            performLearningAnalysis();
+            learningTickCounter = 0;
+        }
+
         if (useScheduler) {
             tickWithScheduler();
         } else {
             tickLegacy();
+        }
+    }
+
+    /**
+     * Perform periodic learning analysis to identify patterns
+     */
+    private void performLearningAnalysis() {
+        try {
+            learningSystem.generateInsights();
+            SteveMod.LOGGER.debug("Steve '{}' performed learning analysis - {} insights in knowledge base",
+                steve.getSteveName(), knowledgeBase.getInsightCount());
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error during learning analysis for Steve '{}'", steve.getSteveName(), e);
         }
     }
 
@@ -144,7 +180,10 @@ public class ActionExecutor {
 
                 steve.getMemory().addAction(currentAction.getDescription());
 
-                if (!result.isSuccess() && result.requiresReplanning()) {
+                if (result.isSuccess()) {
+                    // Record successful action in knowledge base
+                    recordSuccess(currentAction.task.getAction());
+                } else if (result.requiresReplanning()) {
                     // Action failed, attempt error recovery
                     handleErrorRecovery(currentAction.getDescription(), result.getMessage());
                 }
@@ -327,19 +366,23 @@ public class ActionExecutor {
             SteveMod.LOGGER.info("Steve '{}' attempting error recovery for: {}",
                 steve.getSteveName(), failedAction);
 
+            // Record failure in learning system
+            recordFailure(failedAction, new HashMap<>(), errorMessage);
+
             // Notify user
             if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
                 sendToGUI(steve.getSteveName(), "Problem: " + errorMessage + ". Replanning...");
             }
 
-            // Build error recovery prompt
+            // Build error recovery prompt with learned knowledge
             String systemPrompt = PromptBuilder.buildSystemPrompt();
+            String knowledgeSummary = knowledgeBase.generateKnowledgeSummary();
             String errorPrompt = PromptBuilder.buildErrorRecoveryPrompt(
                 steve,
                 failedAction,
                 errorMessage,
                 currentGoal != null ? currentGoal : "unknown goal"
-            );
+            ) + knowledgeSummary;
 
             // Get recovery plan from LLM
             String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
@@ -383,6 +426,58 @@ public class ActionExecutor {
         } catch (Exception e) {
             SteveMod.LOGGER.error("Error during error recovery", e);
         }
+    }
+
+    /**
+     * Record a failed action in the learning system
+     */
+    private void recordFailure(String action, Map<String, Object> parameters, String errorMessage) {
+        try {
+            String context = "Goal: " + (currentGoal != null ? currentGoal : "none") +
+                           ", Inventory: " + steve.getInventory().getSlots() + " slots";
+            failureTracker.recordFailure(action, parameters, errorMessage, context);
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error recording failure", e);
+        }
+    }
+
+    /**
+     * Record a successful action in the knowledge base
+     */
+    private void recordSuccess(String action) {
+        try {
+            knowledgeBase.recordSuccess(action);
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error recording success", e);
+        }
+    }
+
+    /**
+     * Get learning system for external access
+     */
+    public LearningSystem getLearningSystem() {
+        return learningSystem;
+    }
+
+    /**
+     * Get failure tracker for external access
+     */
+    public FailureTracker getFailureTracker() {
+        return failureTracker;
+    }
+
+    /**
+     * Get knowledge base for external access
+     */
+    public ActionKnowledgeBase getKnowledgeBase() {
+        return knowledgeBase;
+    }
+
+    /**
+     * Get adaptive retry strategy
+     */
+    public AdaptiveRetryStrategy getRetryStrategy() {
+        return retryStrategy;
     }
 }
 

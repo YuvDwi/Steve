@@ -155,6 +155,12 @@ public class PromptBuilder {
             prompt.append("No significant memories yet.\n");
         }
 
+        // === LEARNED KNOWLEDGE ===
+        String knowledgeSummary = steve.getActionExecutor().getKnowledgeBase().generateKnowledgeSummary();
+        if (knowledgeSummary != null && !knowledgeSummary.trim().isEmpty()) {
+            prompt.append(knowledgeSummary);
+        }
+
         // === PLAYER COMMAND ===
         prompt.append("\n=== PLAYER COMMAND ===\n");
         prompt.append("\"").append(command).append("\"\n");
