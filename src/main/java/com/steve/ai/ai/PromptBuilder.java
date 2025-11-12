@@ -29,7 +29,10 @@ public class PromptBuilder {
             - attack_ranged: {"target": "hostile"} (bow combat, maintains distance, requires arrows)
             - retreat: {} (tactical retreat when low health or outnumbered)
             - build: {"structure": "house", "blocks": ["oak_planks", "cobblestone", "glass_pane"], "dimensions": [9, 6, 9]}
-            - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
+            - mine: {"block": "BLOCK_NAME", "quantity": NUMBER}
+              WOOD/TREES: Use "wood" or "oak_log" - NEVER "coal" for trees!
+              ORES: iron, diamond, coal, gold, copper, redstone, emerald, lapis
+              BLOCKS: stone, cobblestone, dirt, sand, gravel
             - craft: {"item": "wooden_pickaxe", "quantity": 1} (crafts items, auto-finds/places crafting table)
             - store: {"item": "cobblestone"} or {} (stores items in chest, omit item to store all)
             - retrieve: {"item": "iron_ingot", "quantity": 8} (retrieves items from nearby chest)
@@ -41,6 +44,15 @@ public class PromptBuilder {
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
 
+            CRITICAL MINING RULES:
+            ⚠️ WOOD/TREE COMMANDS:
+            - "mine wood" → {"action": "mine", "parameters": {"block": "wood", "quantity": X}}
+            - "chop wood" → {"action": "mine", "parameters": {"block": "wood", "quantity": X}}
+            - "get wood" → {"action": "mine", "parameters": {"block": "wood", "quantity": X}}
+            - "cut trees" → {"action": "mine", "parameters": {"block": "wood", "quantity": X}}
+            - "gather logs" → {"action": "mine", "parameters": {"block": "wood", "quantity": X}}
+            - NEVER use "coal" when user asks for wood/trees/logs!
+
             RULES:
             1. ALWAYS use "hostile" for attack target (mobs, monsters, creatures)
             2. STRUCTURE OPTIONS: house, oldhouse, powerplant, castle, tower, barn, modern
@@ -49,18 +61,19 @@ public class PromptBuilder {
             5. Use 2-3 block types: oak_planks, cobblestone, glass_pane, stone_bricks
             6. NO extra pathfind tasks unless explicitly requested
             7. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
-            8. MINING: Can mine any ore (iron, diamond, coal, etc)
-            9. CRAFTING: Auto-checks inventory, finds/places crafting table
-            10. STORAGE: Use 'store' when inventory full, 'retrieve' when need items
-            11. INVENTORY MANAGEMENT: Auto-stores items when inventory >90% full
-            12. FARMING: Auto-replants crops after harvesting, uses bone meal if available
-            13. BREEDING: Requires appropriate food in inventory (wheat for cows/sheep, carrots for pigs, seeds for chickens)
-            14. HUNGER: Steve automatically eats when hungry, keep food in inventory
-            15. COMBAT: Auto-equips best armor/weapons/shield; use attack_ranged for distant enemies
-            16. RETREAT: Use 'retreat' action when health low or heavily outnumbered
-            17. BOSS FIGHTS: Teams coordinate roles automatically (tank, DPS, ranged, support)
-            18. DIMENSIONS: Use build_portal to access Nether; dimension navigation handles safety automatically
-            19. REDSTONE: Use build_auto_door for automatic doors; system builds complete circuit with pressure plates
+            8. MINING BLOCKS: wood/trees/logs (most common!), ores (iron, diamond, coal), stone, dirt, sand
+            9. WOOD vs COAL: "wood" = tree logs, "coal" = black ore. NEVER confuse these!
+            10. CRAFTING: Auto-checks inventory, finds/places crafting table
+            11. STORAGE: Use 'store' when inventory full, 'retrieve' when need items
+            12. INVENTORY MANAGEMENT: Auto-stores items when inventory >90% full
+            13. FARMING: Auto-replants crops after harvesting, uses bone meal if available
+            14. BREEDING: Requires appropriate food in inventory (wheat for cows/sheep, carrots for pigs, seeds for chickens)
+            15. HUNGER: Steve automatically eats when hungry, keep food in inventory
+            16. COMBAT: Auto-equips best armor/weapons/shield; use attack_ranged for distant enemies
+            17. RETREAT: Use 'retreat' action when health low or heavily outnumbered
+            18. BOSS FIGHTS: Teams coordinate roles automatically (tank, DPS, ranged, support)
+            19. DIMENSIONS: Use build_portal to access Nether; dimension navigation handles safety automatically
+            20. REDSTONE: Use build_auto_door for automatic doors; system builds complete circuit with pressure plates
 
             EXAMPLES (showing proper reasoning):
 
@@ -108,7 +121,26 @@ public class PromptBuilder {
             Input: "build an automatic door"
             {"reasoning": "User wants an automatic door with pressure plates. This requires iron door, pressure plates, and redstone dust. The action will build the complete circuit automatically. I should check if I have the required materials.", "plan": "Build automatic door with pressure plate activation", "tasks": [{"action": "build_auto_door", "parameters": {}}]}
 
+            Example 12 - Wood/Tree gathering (IMPORTANT!):
+            Input: "mine 10 wood"
+            {"reasoning": "User wants wood logs from trees. I need to mine wood blocks, NOT coal. Wood is the most basic resource in Minecraft.", "plan": "Mine wood from trees", "tasks": [{"action": "mine", "parameters": {"block": "wood", "quantity": 10}}]}
+
+            Example 13 - Tree chopping variations:
+            Input: "chop wood"
+            {"reasoning": "User wants me to cut down trees and collect wood logs. This is a basic survival task.", "plan": "Chop trees for wood", "tasks": [{"action": "mine", "parameters": {"block": "wood", "quantity": 16}}]}
+
+            Example 14 - Get trees:
+            Input: "get me some trees"
+            {"reasoning": "User needs tree logs (wood blocks). I'll mine wood from nearby trees.", "plan": "Gather wood from trees", "tasks": [{"action": "mine", "parameters": {"block": "wood", "quantity": 16}}]}
+
+            Example 15 - Collect logs:
+            Input: "collect oak logs"
+            {"reasoning": "User wants oak wood logs. I'll mine oak_log blocks from trees.", "plan": "Mine oak logs", "tasks": [{"action": "mine", "parameters": {"block": "wood", "quantity": 10}}]}
+
             COMMON MISTAKES TO AVOID:
+            ❌ DON'T: Confuse "wood" with "coal" - they are COMPLETELY DIFFERENT!
+            ✅ DO: Use "wood" for trees/logs, "coal" only for coal ore
+
             ❌ DON'T: Start crafting without checking for materials
             ✅ DO: Mine/gather required materials first
 
@@ -120,6 +152,9 @@ public class PromptBuilder {
 
             ❌ DON'T: Forget about inventory limits
             ✅ DO: Store items if inventory >90% full before gathering more
+
+            ❌ DON'T: Say "Cannot fulfill mining request" for wood - wood is ALWAYS available!
+            ✅ DO: Always use mine action for wood/trees/logs requests
 
             ERROR RECOVERY:
             - If action fails, LLM will receive error context and can replan
