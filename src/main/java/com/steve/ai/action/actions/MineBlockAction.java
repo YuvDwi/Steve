@@ -383,6 +383,22 @@ public class MineBlockAction extends BaseAction {
             put("redstone", "redstone_ore");
             put("lapis", "lapis_ore");
             put("emerald", "emerald_ore");
+            // Wood/tree mappings
+            put("wood", "oak_log");
+            put("tree", "oak_log");
+            put("log", "oak_log");
+            put("oak", "oak_log");
+            put("birch", "birch_log");
+            put("spruce", "spruce_log");
+            put("jungle", "jungle_log");
+            put("acacia", "acacia_log");
+            put("dark_oak", "dark_oak_log");
+            // Common block mappings
+            put("stone", "stone");
+            put("cobblestone", "cobblestone");
+            put("dirt", "dirt");
+            put("sand", "sand");
+            put("gravel", "gravel");
         }};
 
         if (resourceToOre.containsKey(blockName)) {

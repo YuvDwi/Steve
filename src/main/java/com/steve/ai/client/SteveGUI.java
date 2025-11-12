@@ -84,6 +84,10 @@ public class SteveGUI {
         return isOpen;
     }
 
+    public static boolean isInputFocused() {
+        return inputBox != null && inputBox.isFocused();
+    }
+
     private static void initializeInputBox() {
         Minecraft mc = Minecraft.getInstance();
         if (inputBox == null) {
@@ -335,13 +339,15 @@ public class SteveGUI {
         }
 
         // Backspace, Delete, Home, End, Left, Right - pass to input box
-        if (keyCode == 259 || keyCode == 261 || keyCode == 268 || keyCode == 269 || 
+        if (keyCode == 259 || keyCode == 261 || keyCode == 268 || keyCode == 269 ||
             keyCode == 263 || keyCode == 262) {
             inputBox.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
 
-        return true; // Consume all keys to prevent game controls
+        // For normal character keys, return false so charTyped can handle them
+        // This allows typing letters like 'k' without closing the GUI
+        return false;
     }
 
     public static boolean handleCharTyped(char codePoint, int modifiers) {

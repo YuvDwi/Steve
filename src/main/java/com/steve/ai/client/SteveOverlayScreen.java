@@ -27,16 +27,21 @@ public class SteveOverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // K key to close
-        if (keyCode == 75 && !hasShiftDown() && !hasControlDown() && !hasAltDown()) { // K
+        // First, let SteveGUI handle the key (it will consume special keys like Enter, ESC, arrows)
+        boolean handled = SteveGUI.handleKeyPress(keyCode, scanCode, modifiers);
+
+        // If not handled and it's K key and input is NOT focused, toggle GUI
+        // This prevents closing GUI while typing 'k' in the input box
+        if (!handled && keyCode == 75 && !SteveGUI.isInputFocused() &&
+            !hasShiftDown() && !hasControlDown() && !hasAltDown()) { // K
             SteveGUI.toggle();
             if (minecraft != null) {
                 minecraft.setScreen(null);
             }
             return true;
         }
-        
-        return SteveGUI.handleKeyPress(keyCode, scanCode, modifiers);
+
+        return handled;
     }
 
     @Override
