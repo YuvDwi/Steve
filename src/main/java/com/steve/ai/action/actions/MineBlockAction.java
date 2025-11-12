@@ -71,14 +71,21 @@ public class MineBlockAction extends BaseAction {
         ticksRunning = 0;
         ticksSinceLastTorch = 0;
         ticksSinceLastMine = 0;
-        
+
         targetBlock = parseBlock(blockName);
-        
+
         if (targetBlock == null || targetBlock == Blocks.AIR) {
             result = ActionResult.failure("Invalid block type: " + blockName);
             return;
         }
-        
+
+        // Check if this is a wood/tree block
+        String targetName = targetBlock.getName().getString().toLowerCase();
+        boolean isWood = targetName.contains("log") || targetName.contains("wood");
+
+        SteveMod.LOGGER.info("Steve '{}' mining {} (isWood: {})",
+            steve.getSteveName(), targetBlock.getName().getString(), isWood);
+
         net.minecraft.world.entity.player.Player nearestPlayer = findNearestPlayer();
         if (nearestPlayer != null) {
             net.minecraft.world.phys.Vec3 eyePos = nearestPlayer.getEyePosition(1.0F);
@@ -268,14 +275,25 @@ public class MineBlockAction extends BaseAction {
     }
 
     /**
-     * Mine forward in ONE DIRECTION - creates a straight tunnel!
-     * Steve progresses forward block by block
+     * Mine forward - tunnel for ores, explore for surface blocks
      */
     private void mineNearbyBlock() {
+        String targetName = targetBlock.getName().getString().toLowerCase();
+        boolean isWood = targetName.contains("log") || targetName.contains("wood");
+
+        if (isWood) {
+            // For wood: just search again, don't tunnel
+            SteveMod.LOGGER.info("Steve '{}' couldn't find wood, searching again...", steve.getSteveName());
+            // Will search again on next tick
+            ticksSinceLastMine = 0;
+            return;
+        }
+
+        // Original tunnel mining for ores
         BlockPos centerPos = currentTunnelPos;
         BlockPos abovePos = centerPos.above();
         BlockPos belowPos = centerPos.below();
-        
+
         BlockState centerState = steve.level().getBlockState(centerPos);
         if (!centerState.isAir() && centerState.getBlock() != Blocks.BEDROCK) {
             steve.teleportTo(centerPos.getX() + 0.5, centerPos.getY(), centerPos.getZ() + 0.5);
@@ -295,30 +313,54 @@ public class MineBlockAction extends BaseAction {
             steve.swing(InteractionHand.MAIN_HAND, true);
             mineBlockAndCollect(belowPos);
         }
-        
+
         currentTunnelPos = currentTunnelPos.offset(miningDirectionX, 0, miningDirectionZ);
-        
+
         ticksSinceLastMine = 0; // Reset delay
     }
 
     /**
-     * Find ore blocks in the tunnel ahead
-     * Searches forward in the mining direction
+     * Find blocks - different strategy for surface blocks (wood) vs ores
      */
     private void findNextBlock() {
         List<BlockPos> foundBlocks = new ArrayList<>();
-        
-        for (int distance = 0; distance < 20; distance++) {
-            BlockPos checkPos = currentTunnelPos.offset(miningDirectionX * distance, 0, miningDirectionZ * distance);
-            
-            for (int y = -1; y <= 1; y++) {
-                BlockPos orePos = checkPos.offset(0, y, 0);
-                if (steve.level().getBlockState(orePos).getBlock() == targetBlock) {
-                    foundBlocks.add(orePos);
+
+        // Check if this is a wood/log block
+        String targetName = targetBlock.getName().getString().toLowerCase();
+        boolean isWood = targetName.contains("log") || targetName.contains("wood");
+
+        if (isWood) {
+            // Search for wood blocks on surface and upwards (trees!)
+            BlockPos stevePos = steve.blockPosition();
+            int searchRadius = 30; // Larger radius for trees
+
+            for (int x = -searchRadius; x <= searchRadius; x++) {
+                for (int z = -searchRadius; z <= searchRadius; z++) {
+                    for (int y = -5; y <= 20; y++) { // Look up for trees!
+                        BlockPos checkPos = stevePos.offset(x, y, z);
+                        if (steve.level().getBlockState(checkPos).getBlock() == targetBlock) {
+                            foundBlocks.add(checkPos);
+                        }
+                    }
+                }
+            }
+
+            SteveMod.LOGGER.info("Steve '{}' found {} wood blocks nearby",
+                steve.getSteveName(), foundBlocks.size());
+        } else {
+            // Original ore search - tunnel ahead
+            for (int distance = 0; distance < 20; distance++) {
+                BlockPos checkPos = currentTunnelPos.offset(miningDirectionX * distance, 0, miningDirectionZ * distance);
+
+                for (int y = -1; y <= 1; y++) {
+                    BlockPos orePos = checkPos.offset(0, y, 0);
+                    if (steve.level().getBlockState(orePos).getBlock() == targetBlock) {
+                        foundBlocks.add(orePos);
+                    }
                 }
             }
         }
-        
+
         if (!foundBlocks.isEmpty()) {
             currentTarget = foundBlocks.stream()
                 .min((a, b) -> Double.compare(a.distSqr(currentTunnelPos), b.distSqr(currentTunnelPos)))
