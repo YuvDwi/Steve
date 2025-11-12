@@ -271,6 +271,8 @@ public class ActionExecutor {
             case "place" -> new PlaceBlockAction(steve, task);
             case "craft" -> new CraftItemAction(steve, task);
             case "attack" -> new CombatAction(steve, task);
+            case "attack_ranged" -> new RangedCombatAction(steve, task);
+            case "retreat" -> new TacticalRetreatAction(steve, task);
             case "follow" -> new FollowPlayerAction(steve, task);
             case "gather" -> new GatherResourceAction(steve, task);
             case "build" -> new BuildStructureAction(steve, task);

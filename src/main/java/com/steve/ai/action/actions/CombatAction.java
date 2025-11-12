@@ -2,7 +2,9 @@ package com.steve.ai.action.actions;
 
 import com.steve.ai.action.ActionResult;
 import com.steve.ai.action.Task;
+import com.steve.ai.combat.CombatEquipmentManager;
 import com.steve.ai.entity.SteveEntity;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Monster;
@@ -13,14 +15,18 @@ import java.util.List;
 public class CombatAction extends BaseAction {
     private String targetType;
     private LivingEntity target;
+    private final CombatEquipmentManager equipmentManager;
     private int ticksRunning;
     private int ticksStuck;
+    private int ticksSinceBlock;
     private double lastX, lastZ;
     private static final int MAX_TICKS = 600;
     private static final double ATTACK_RANGE = 3.5;
+    private static final int BLOCK_COOLDOWN = 10; // 0.5 seconds
 
     public CombatAction(SteveEntity steve, Task task) {
         super(steve, task);
+        this.equipmentManager = new CombatEquipmentManager(steve);
     }
 
     @Override
@@ -28,14 +34,26 @@ public class CombatAction extends BaseAction {
         targetType = task.getStringParameter("target");
         ticksRunning = 0;
         ticksStuck = 0;
-        
+        ticksSinceBlock = 0;
+
         // Make sure we're not flying (in case we were building)
         steve.setFlying(false);
-        
+
         steve.setInvulnerableBuilding(true);
-        
+
+        // Auto-equip best combat gear
+        String equipSummary = equipmentManager.autoEquipCombatGear();
+        com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat prep: {}",
+            steve.getSteveName(), equipSummary);
+
+        // Check if should retreat instead
+        if (TacticalRetreatAction.shouldRetreat(steve)) {
+            com.steve.ai.SteveMod.LOGGER.warn("Steve '{}' health/threat level suggests retreat",
+                steve.getSteveName());
+        }
+
         findTarget();
-        
+
         if (target == null) {
             com.steve.ai.SteveMod.LOGGER.warn("Steve '{}' no targets nearby", steve.getSteveName());
         }
@@ -44,18 +62,28 @@ public class CombatAction extends BaseAction {
     @Override
     protected void onTick() {
         ticksRunning++;
-        
+        ticksSinceBlock++;
+
         if (ticksRunning > MAX_TICKS) {
             // Combat complete - clean up and disable invulnerability
             steve.setInvulnerableBuilding(false);
             steve.setSprinting(false);
             steve.getNavigation().stop();
-            com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat complete, invulnerability disabled", 
+            stopBlocking();
+            com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat complete, invulnerability disabled",
                 steve.getSteveName());
             result = ActionResult.success("Combat complete");
             return;
         }
-        
+
+        // Check if should retreat
+        if (TacticalRetreatAction.shouldRetreat(steve)) {
+            steve.setInvulnerableBuilding(false);
+            stopBlocking();
+            result = ActionResult.failure("Health/threat critical - retreat recommended");
+            return;
+        }
+
         // Re-search for targets periodically or if current target is invalid
         if (target == null || !target.isAlive() || target.isRemoved()) {
             if (ticksRunning % 20 == 0) {
@@ -65,7 +93,7 @@ public class CombatAction extends BaseAction {
                 return; // Keep searching
             }
         }
-        
+
         double distance = steve.distanceTo(target);
         
         steve.setSprinting(true);
@@ -99,13 +127,44 @@ public class CombatAction extends BaseAction {
         lastZ = currentZ;
         
         if (distance <= ATTACK_RANGE) {
+            // Use shield if available and under threat
+            if (equipmentManager.hasShieldEquipped() && target.isAggressive()) {
+                if (ticksSinceBlock >= BLOCK_COOLDOWN) {
+                    startBlocking();
+                    ticksSinceBlock = 0;
+                }
+            } else {
+                stopBlocking();
+            }
+
+            // Attack
             steve.doHurtTarget(target);
-            steve.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
-            
+            steve.swing(InteractionHand.MAIN_HAND, true);
+
             // Attack 3 times per second (every 6-7 ticks)
             if (ticksRunning % 7 == 0) {
                 steve.doHurtTarget(target);
             }
+        } else {
+            stopBlocking();
+        }
+    }
+
+    /**
+     * Start blocking with shield
+     */
+    private void startBlocking() {
+        if (equipmentManager.hasShieldEquipped()) {
+            steve.startUsingItem(InteractionHand.OFF_HAND);
+        }
+    }
+
+    /**
+     * Stop blocking with shield
+     */
+    private void stopBlocking() {
+        if (steve.isUsingItem()) {
+            steve.stopUsingItem();
         }
     }
 
@@ -115,8 +174,9 @@ public class CombatAction extends BaseAction {
         steve.getNavigation().stop();
         steve.setSprinting(false);
         steve.setFlying(false);
+        stopBlocking();
         target = null;
-        com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat cancelled, invulnerability disabled", 
+        com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat cancelled, invulnerability disabled",
             steve.getSteveName());
     }
 

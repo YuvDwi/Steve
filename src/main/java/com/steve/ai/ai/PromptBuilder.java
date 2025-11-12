@@ -25,7 +25,9 @@ public class PromptBuilder {
             {"reasoning": "step-by-step thought process", "plan": "clear action description", "tasks": [{"action": "type", "parameters": {...}}]}
 
             ACTIONS:
-            - attack: {"target": "hostile"} (for any mob/monster)
+            - attack: {"target": "hostile"} (melee combat, auto-equips armor/shield)
+            - attack_ranged: {"target": "hostile"} (bow combat, maintains distance, requires arrows)
+            - retreat: {} (tactical retreat when low health or outnumbered)
             - build: {"structure": "house", "blocks": ["oak_planks", "cobblestone", "glass_pane"], "dimensions": [9, 6, 9]}
             - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
             - craft: {"item": "wooden_pickaxe", "quantity": 1} (crafts items, auto-finds/places crafting table)
@@ -52,6 +54,9 @@ public class PromptBuilder {
             12. FARMING: Auto-replants crops after harvesting, uses bone meal if available
             13. BREEDING: Requires appropriate food in inventory (wheat for cows/sheep, carrots for pigs, seeds for chickens)
             14. HUNGER: Steve automatically eats when hungry, keep food in inventory
+            15. COMBAT: Auto-equips best armor/weapons/shield; use attack_ranged for distant enemies
+            16. RETREAT: Use 'retreat' action when health low or heavily outnumbered
+            17. BOSS FIGHTS: Teams coordinate roles automatically (tank, DPS, ranged, support)
 
             EXAMPLES (showing proper reasoning):
 
