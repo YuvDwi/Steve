@@ -4,6 +4,8 @@ import com.steve.ai.action.ActionExecutor;
 import com.steve.ai.action.HungerManager;
 import com.steve.ai.dimension.DimensionNavigator;
 import com.steve.ai.memory.SteveMemory;
+import com.steve.ai.quest.AchievementManager;
+import com.steve.ai.quest.QuestManager;
 import com.steve.ai.team.Team;
 import com.steve.ai.team.TeamManager;
 import com.steve.ai.team.SteveRole;
@@ -36,6 +38,8 @@ public class SteveEntity extends PathfinderMob {
     private SteveMemory memory;
     private ActionExecutor actionExecutor;
     private HungerManager hungerManager;
+    private QuestManager questManager;
+    private AchievementManager achievementManager;
     private ItemStackHandler inventory;
     private int tickCounter = 0;
     private boolean isFlying = false;
@@ -47,6 +51,8 @@ public class SteveEntity extends PathfinderMob {
         this.memory = new SteveMemory(this);
         this.actionExecutor = new ActionExecutor(this);
         this.hungerManager = new HungerManager(this);
+        this.questManager = new QuestManager(this.steveName);
+        this.achievementManager = new AchievementManager(this.steveName);
         this.inventory = new ItemStackHandler(INVENTORY_SIZE);
         this.setCustomNameVisible(true);
 
@@ -89,6 +95,10 @@ public class SteveEntity extends PathfinderMob {
         this.steveName = name;
         this.entityData.set(STEVE_NAME, name);
         this.setCustomName(Component.literal(name));
+
+        // Reinitialize managers with new name
+        this.questManager = new QuestManager(name);
+        this.achievementManager = new AchievementManager(name);
     }
 
     public String getSteveName() {
@@ -105,6 +115,14 @@ public class SteveEntity extends PathfinderMob {
 
     public HungerManager getHungerManager() {
         return this.hungerManager;
+    }
+
+    public QuestManager getQuestManager() {
+        return this.questManager;
+    }
+
+    public AchievementManager getAchievementManager() {
+        return this.achievementManager;
     }
 
     /**
