@@ -1,7 +1,14 @@
 package com.steve.ai.entity;
 
 import com.steve.ai.action.ActionExecutor;
+import com.steve.ai.action.HungerManager;
+import com.steve.ai.dimension.DimensionNavigator;
 import com.steve.ai.memory.SteveMemory;
+import com.steve.ai.quest.AchievementManager;
+import com.steve.ai.quest.QuestManager;
+import com.steve.ai.team.Team;
+import com.steve.ai.team.TeamManager;
+import com.steve.ai.team.SteveRole;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -17,15 +24,23 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraftforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
 
 public class SteveEntity extends PathfinderMob {
-    private static final EntityDataAccessor<String> STEVE_NAME = 
+    private static final EntityDataAccessor<String> STEVE_NAME =
         SynchedEntityData.defineId(SteveEntity.class, EntityDataSerializers.STRING);
+
+    // Inventory size: 36 slots (same as player - 27 main + 9 hotbar)
+    private static final int INVENTORY_SIZE = 36;
 
     private String steveName;
     private SteveMemory memory;
     private ActionExecutor actionExecutor;
+    private HungerManager hungerManager;
+    private QuestManager questManager;
+    private AchievementManager achievementManager;
+    private ItemStackHandler inventory;
     private int tickCounter = 0;
     private boolean isFlying = false;
     private boolean isInvulnerable = false;
@@ -35,8 +50,12 @@ public class SteveEntity extends PathfinderMob {
         this.steveName = "Steve";
         this.memory = new SteveMemory(this);
         this.actionExecutor = new ActionExecutor(this);
+        this.hungerManager = new HungerManager(this);
+        this.questManager = new QuestManager(this.steveName);
+        this.achievementManager = new AchievementManager(this.steveName);
+        this.inventory = new ItemStackHandler(INVENTORY_SIZE);
         this.setCustomNameVisible(true);
-        
+
         this.isInvulnerable = true;
         this.setInvulnerable(true);
     }
@@ -65,9 +84,10 @@ public class SteveEntity extends PathfinderMob {
     @Override
     public void tick() {
         super.tick();
-        
+
         if (!this.level().isClientSide) {
             actionExecutor.tick();
+            hungerManager.tick();
         }
     }
 
@@ -75,6 +95,10 @@ public class SteveEntity extends PathfinderMob {
         this.steveName = name;
         this.entityData.set(STEVE_NAME, name);
         this.setCustomName(Component.literal(name));
+
+        // Reinitialize managers with new name
+        this.questManager = new QuestManager(name);
+        this.achievementManager = new AchievementManager(name);
     }
 
     public String getSteveName() {
@@ -89,14 +113,95 @@ public class SteveEntity extends PathfinderMob {
         return this.actionExecutor;
     }
 
+    public HungerManager getHungerManager() {
+        return this.hungerManager;
+    }
+
+    public QuestManager getQuestManager() {
+        return this.questManager;
+    }
+
+    public AchievementManager getAchievementManager() {
+        return this.achievementManager;
+    }
+
+    /**
+     * Get Steve's inventory handler
+     * @return ItemStackHandler with 36 slots
+     */
+    public ItemStackHandler getInventory() {
+        return this.inventory;
+    }
+
+    // ==================== Team Methods ====================
+
+    /**
+     * Get this Steve's team
+     * @return Team or null if not in a team
+     */
+    public Team getTeam() {
+        return TeamManager.getInstance().getTeam(this.steveName);
+    }
+
+    /**
+     * Get this Steve's role
+     * @return SteveRole (GENERALIST if not in team or no role assigned)
+     */
+    public SteveRole getRole() {
+        return TeamManager.getInstance().getRole(this.steveName);
+    }
+
+    /**
+     * Check if this Steve is in a team
+     * @return True if in a team
+     */
+    public boolean isInTeam() {
+        return TeamManager.getInstance().isInTeam(this.steveName);
+    }
+
+    /**
+     * Check if this Steve is the team leader
+     * @return True if Steve is leader of their team
+     */
+    public boolean isTeamLeader() {
+        Team team = getTeam();
+        return team != null && this.steveName.equals(team.getLeaderName());
+    }
+
+    /**
+     * Send a message to team
+     * @param message Message content
+     */
+    public void sendTeamMessage(String message) {
+        Team team = getTeam();
+        if (team != null) {
+            team.broadcastMessage(new Team.TeamMessage(this.steveName, message));
+        }
+    }
+
+    /**
+     * Get recent team messages
+     * @param count Number of messages to retrieve
+     * @return List of team messages
+     */
+    public java.util.List<Team.TeamMessage> getTeamMessages(int count) {
+        Team team = getTeam();
+        return team != null ? team.getMessagesFor(this.steveName) : java.util.Collections.emptyList();
+    }
+
+    // =======================================================
+
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putString("SteveName", this.steveName);
-        
+
         CompoundTag memoryTag = new CompoundTag();
         this.memory.saveToNBT(memoryTag);
         tag.put("Memory", memoryTag);
+
+        // Save inventory
+        tag.put("Inventory", this.inventory.serializeNBT());
     }
 
     @Override
@@ -105,9 +210,14 @@ public class SteveEntity extends PathfinderMob {
         if (tag.contains("SteveName")) {
             this.setSteveName(tag.getString("SteveName"));
         }
-        
+
         if (tag.contains("Memory")) {
             this.memory.loadFromNBT(tag.getCompound("Memory"));
+        }
+
+        // Load inventory
+        if (tag.contains("Inventory")) {
+            this.inventory.deserializeNBT(tag.getCompound("Inventory"));
         }
     }
 

@@ -30,7 +30,11 @@ public class ClientEventHandler {
             narratorDisabled = true;
         }
         
-        if (KeyBindings.TOGGLE_GUI != null && KeyBindings.TOGGLE_GUI.consumeClick()) {            SteveGUI.toggle();
+        // Only toggle GUI if input box is not focused (prevent closing while typing "k")
+        if (KeyBindings.TOGGLE_GUI != null && KeyBindings.TOGGLE_GUI.consumeClick()) {
+            if (!SteveGUI.isOpen() || mc.screen == null) {
+                SteveGUI.toggle();
+            }
         }
     }
 }
