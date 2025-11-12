@@ -282,6 +282,7 @@ public class ActionExecutor {
             case "farm" -> new FarmAction(steve, task);
             case "breed" -> new BreedingAction(steve, task);
             case "build_portal" -> new PortalBuilderAction(steve, task);
+            case "build_auto_door" -> new AutomaticDoorAction(steve, task);
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
                 yield null;

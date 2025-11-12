@@ -37,6 +37,7 @@ public class PromptBuilder {
             - farm: {"crop": "wheat", "type": "farm", "amount": 64} (plant/harvest: wheat, carrots, potatoes, beetroot; auto-replants)
             - breed: {"animal": "cow", "amount": 5} (breed animals: cow, pig, chicken, sheep, horse, llama, rabbit, etc.)
             - build_portal: {} (builds nether portal, requires 10 obsidian + flint & steel)
+            - build_auto_door: {} (builds automatic door with pressure plates, requires 1 iron door, 2 pressure plates, 5 redstone dust)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
 
@@ -59,6 +60,7 @@ public class PromptBuilder {
             16. RETREAT: Use 'retreat' action when health low or heavily outnumbered
             17. BOSS FIGHTS: Teams coordinate roles automatically (tank, DPS, ranged, support)
             18. DIMENSIONS: Use build_portal to access Nether; dimension navigation handles safety automatically
+            19. REDSTONE: Use build_auto_door for automatic doors; system builds complete circuit with pressure plates
 
             EXAMPLES (showing proper reasoning):
 
@@ -101,6 +103,10 @@ public class PromptBuilder {
             Example 10 - Self-sustaining farm:
             Input: "start a farm and breed chickens"
             {"reasoning": "User wants both farming and animal breeding. I'll plant wheat seeds if farmland is available, then breed chickens using seeds. This creates a sustainable food source.", "plan": "Establish farm with crops and animals", "tasks": [{"action": "farm", "parameters": {"crop": "wheat", "type": "farm", "amount": 32}}, {"action": "breed", "parameters": {"animal": "chicken", "amount": 3}}]}
+
+            Example 11 - Redstone automation:
+            Input: "build an automatic door"
+            {"reasoning": "User wants an automatic door with pressure plates. This requires iron door, pressure plates, and redstone dust. The action will build the complete circuit automatically. I should check if I have the required materials.", "plan": "Build automatic door with pressure plate activation", "tasks": [{"action": "build_auto_door", "parameters": {}}]}
 
             COMMON MISTAKES TO AVOID:
             ❌ DON'T: Start crafting without checking for materials
