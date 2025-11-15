@@ -102,7 +102,8 @@ public class OpenAIClient {
         JsonObject body = new JsonObject();
         body.addProperty("model", SteveConfig.OPENAI_MODEL.get());
         body.addProperty("temperature", SteveConfig.TEMPERATURE.get());
-        body.addProperty("max_tokens", SteveConfig.MAX_TOKENS.get());
+        // gpt-5 and newer models use max_completion_tokens instead of max_tokens
+        body.addProperty("max_completion_tokens", SteveConfig.MAX_TOKENS.get());
 
         JsonArray messages = new JsonArray();
         
