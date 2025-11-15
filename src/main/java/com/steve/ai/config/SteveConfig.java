@@ -31,16 +31,16 @@ public class SteveConfig {
             .define("apiKey", "");
         
         OPENAI_MODEL = builder
-            .comment("OpenAI model to use (gpt-4, gpt-4-turbo-preview, gpt-3.5-turbo)")
-            .define("model", "gpt-4-turbo-preview");
+            .comment("OpenAI model to use (gpt-5-mini, gpt-5, etc.)")
+            .define("model", "gpt-5-mini");
         
         MAX_TOKENS = builder
             .comment("Maximum tokens per API request")
             .defineInRange("maxTokens", 8000, 100, 65536);
         
         TEMPERATURE = builder
-            .comment("Temperature for AI responses (0.0-2.0, lower is more deterministic)")
-            .defineInRange("temperature", 0.7, 0.0, 2.0);
+            .comment("Temperature for AI responses (0.0-2.0, lower is more deterministic). Note: gpt-5 and newer models only support value 1")
+            .defineInRange("temperature", 1.0, 0.0, 2.0);
         
         builder.pop();
 
