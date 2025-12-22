@@ -14,7 +14,7 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = "steve", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public class ClientEventHandler {
     
-    private static boolean narratorDisabled = false;
+    private static boolean narratorDisabledThisSession = false;
     
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -24,13 +24,23 @@ public class ClientEventHandler {
         
         Minecraft mc = Minecraft.getInstance();
         
-        if (!narratorDisabled && mc.options != null) {
-            mc.options.narrator().set(NarratorStatus.OFF);
-            mc.options.save();
-            narratorDisabled = true;
+        // Desabilitar narrator apenas uma vez por sessão
+        if (!narratorDisabledThisSession && mc.options != null) {
+            try {
+                if (mc.options.narrator().get() != NarratorStatus.OFF) {
+                    mc.options.narrator().set(NarratorStatus.OFF);
+                    mc.options.save();
+                    SteveMod.LOGGER.info("Disabled narrator");
+                }
+                narratorDisabledThisSession = true;
+            } catch (Exception e) {
+                SteveMod.LOGGER.warn("Failed to disable narrator", e);
+            }
         }
         
-        if (KeyBindings.TOGGLE_GUI != null && KeyBindings.TOGGLE_GUI.consumeClick()) {            SteveGUI.toggle();
+        // Verificar input para toggle da GUI
+        if (KeyBindings.TOGGLE_GUI != null && KeyBindings.TOGGLE_GUI.consumeClick()) {
+            SteveGUI.toggle();
         }
     }
 }
