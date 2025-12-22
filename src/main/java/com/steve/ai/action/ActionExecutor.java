@@ -6,28 +6,30 @@ import com.steve.ai.ai.ResponseParser;
 import com.steve.ai.ai.TaskPlanner;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
+import net.minecraft.client.Minecraft;
 
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 
 public class ActionExecutor {
     private final SteveEntity steve;
-    private TaskPlanner taskPlanner;  // Lazy-initialized to avoid loading dependencies on entity creation
+    private TaskPlanner taskPlanner;
     private final Queue<Task> taskQueue;
-    
+
     private BaseAction currentAction;
     private String currentGoal;
     private int ticksSinceLastAction;
-    private BaseAction idleFollowAction;  // Follow player when idle
+    private BaseAction idleFollowAction;
 
     public ActionExecutor(SteveEntity steve) {
         this.steve = steve;
-        this.taskPlanner = null;  // Will be initialized when first needed
+        this.taskPlanner = null;
         this.taskQueue = new LinkedList<>();
         this.ticksSinceLastAction = 0;
         this.idleFollowAction = null;
     }
-    
+
     private TaskPlanner getTaskPlanner() {
         if (taskPlanner == null) {
             SteveMod.LOGGER.info("Initializing TaskPlanner for Steve '{}'", steve.getSteveName());
@@ -38,45 +40,57 @@ public class ActionExecutor {
 
     public void processNaturalLanguageCommand(String command) {
         SteveMod.LOGGER.info("Steve '{}' processing command: {}", steve.getSteveName(), command);
-        
-        if (currentAction != null) {            currentAction.cancel();
+
+        if (currentAction != null) {
+            currentAction.cancel();
             currentAction = null;
         }
-        
+
         if (idleFollowAction != null) {
             idleFollowAction.cancel();
             idleFollowAction = null;
         }
-        
-        try {
-            ResponseParser.ParsedResponse response = getTaskPlanner().planTasks(steve, command);
-            
-            if (response == null) {
-                sendToGUI(steve.getSteveName(), "I couldn't understand that command.");
-                return;
-            }
 
-            currentGoal = response.getPlan();
-            steve.getMemory().setCurrentGoal(currentGoal);
-            
-            taskQueue.clear();
-            taskQueue.addAll(response.getTasks());
-            
-            // Send response to GUI pane only
-            if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                sendToGUI(steve.getSteveName(), "Okay! " + currentGoal);
+        // Executar fora da thread do jogo
+        CompletableFuture.runAsync(() -> {
+            try {
+                ResponseParser.ParsedResponse response =
+                        getTaskPlanner().planTasks(steve, command);
+
+                if (response == null) {
+                    sendToGUI(steve.getSteveName(),
+                            "I couldn't understand that command.");
+                    return;
+                }
+
+                // Voltar para a main thread do Minecraft
+                Minecraft.getInstance().execute(() -> {
+                    currentGoal = response.getPlan();
+                    steve.getMemory().setCurrentGoal(currentGoal);
+
+                    taskQueue.clear();
+                    taskQueue.addAll(response.getTasks());
+
+                    if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+                        sendToGUI(steve.getSteveName(),
+                                "Okay! " + currentGoal);
+                    }
+
+                    SteveMod.LOGGER.info(
+                            "Steve '{}' queued {} tasks",
+                            steve.getSteveName(),
+                            taskQueue.size()
+                    );
+                });
+
+            } catch (Exception e) {
+                SteveMod.LOGGER.error("Failed to process command", e);
+                sendToGUI(steve.getSteveName(),
+                        "Sorry, I had trouble processing that!");
             }
-        } catch (NoClassDefFoundError e) {
-            SteveMod.LOGGER.error("Failed to initialize AI components", e);
-            sendToGUI(steve.getSteveName(), "Sorry, I'm having trouble with my AI systems!");
-        }
-        
-        SteveMod.LOGGER.info("Steve '{}' queued {} tasks", steve.getSteveName(), taskQueue.size());
+        });
     }
-    
-    /**
-     * Send a message to the GUI pane (client-side only, no chat spam)
-     */
+
     private void sendToGUI(String steveName, String message) {
         if (steve.level().isClientSide) {
             com.steve.ai.client.SteveGUI.addSteveMessage(steveName, message);
@@ -85,28 +99,21 @@ public class ActionExecutor {
 
     public void tick() {
         ticksSinceLastAction++;
-        
+
         if (currentAction != null) {
             if (currentAction.isComplete()) {
                 ActionResult result = currentAction.getResult();
-                SteveMod.LOGGER.info("Steve '{}' - Action completed: {} (Success: {})", 
-                    steve.getSteveName(), result.getMessage(), result.isSuccess());
-                
+
+                SteveMod.LOGGER.info(
+                        "Steve '{}' - Action completed: {} (Success: {})",
+                        steve.getSteveName(),
+                        result.getMessage(),
+                        result.isSuccess()
+                );
+
                 steve.getMemory().addAction(currentAction.getDescription());
-                
-                if (!result.isSuccess() && result.requiresReplanning()) {
-                    // Action failed, need to replan
-                    if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                        sendToGUI(steve.getSteveName(), "Problem: " + result.getMessage());
-                    }
-                }
-                
                 currentAction = null;
             } else {
-                if (ticksSinceLastAction % 100 == 0) {
-                    SteveMod.LOGGER.info("Steve '{}' - Ticking action: {}", 
-                        steve.getSteveName(), currentAction.getDescription());
-                }
                 currentAction.tick();
                 return;
             }
@@ -114,24 +121,17 @@ public class ActionExecutor {
 
         if (ticksSinceLastAction >= SteveConfig.ACTION_TICK_DELAY.get()) {
             if (!taskQueue.isEmpty()) {
-                Task nextTask = taskQueue.poll();
-                executeTask(nextTask);
+                executeTask(taskQueue.poll());
                 ticksSinceLastAction = 0;
                 return;
             }
         }
-        
-        // When completely idle (no tasks, no goal), follow nearest player
+
         if (taskQueue.isEmpty() && currentAction == null && currentGoal == null) {
-            if (idleFollowAction == null) {
-                idleFollowAction = new IdleFollowAction(steve);
-                idleFollowAction.start();
-            } else if (idleFollowAction.isComplete()) {
-                // Restart idle following if it stopped
+            if (idleFollowAction == null || idleFollowAction.isComplete()) {
                 idleFollowAction = new IdleFollowAction(steve);
                 idleFollowAction.start();
             } else {
-                // Continue idle following
                 idleFollowAction.tick();
             }
         } else if (idleFollowAction != null) {
@@ -141,19 +141,14 @@ public class ActionExecutor {
     }
 
     private void executeTask(Task task) {
-        SteveMod.LOGGER.info("Steve '{}' executing task: {} (action type: {})", 
-            steve.getSteveName(), task, task.getAction());
-        
         currentAction = createAction(task);
-        
+
         if (currentAction == null) {
             SteveMod.LOGGER.error("FAILED to create action for task: {}", task);
             return;
         }
 
-        SteveMod.LOGGER.info("Created action: {} - starting now...", currentAction.getClass().getSimpleName());
         currentAction.start();
-        SteveMod.LOGGER.info("Action started! Is complete: {}", currentAction.isComplete());
     }
 
     private BaseAction createAction(Task task) {
@@ -166,10 +161,7 @@ public class ActionExecutor {
             case "follow" -> new FollowPlayerAction(steve, task);
             case "gather" -> new GatherResourceAction(steve, task);
             case "build" -> new BuildStructureAction(steve, task);
-            default -> {
-                SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
-                yield null;
-            }
+            default -> null;
         };
     }
 
@@ -194,4 +186,3 @@ public class ActionExecutor {
         return currentGoal;
     }
 }
-
