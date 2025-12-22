@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 public class ResponseParser {
-    
+
     public static ParsedResponse parseAIResponse(String response) {
         if (response == null || response.isEmpty()) {
             return null;
@@ -21,78 +21,84 @@ public class ResponseParser {
 
         try {
             String jsonString = extractJSON(response);
-            
+
             JsonObject json = JsonParser.parseString(jsonString).getAsJsonObject();
-            
+
             String reasoning = json.has("reasoning") ? json.get("reasoning").getAsString() : "";
             String plan = json.has("plan") ? json.get("plan").getAsString() : "";
             List<Task> tasks = new ArrayList<>();
-            
+
             if (json.has("tasks") && json.get("tasks").isJsonArray()) {
                 JsonArray tasksArray = json.getAsJsonArray("tasks");
-                
+
                 for (JsonElement taskElement : tasksArray) {
                     if (taskElement.isJsonObject()) {
-                        JsonObject taskObj = taskElement.getAsJsonObject();
-                        Task task = parseTask(taskObj);
+                        Task task = parseTask(taskElement.getAsJsonObject());
                         if (task != null) {
                             tasks.add(task);
                         }
                     }
                 }
             }
-            
-            if (!reasoning.isEmpty()) {            }
-            
+
             return new ParsedResponse(reasoning, plan, tasks);
-            
+
         } catch (Exception e) {
             SteveMod.LOGGER.error("Failed to parse AI response: {}", response, e);
             return null;
         }
     }
 
+    /**
+     * Extrai JSON de respostas da IA de forma segura.
+     * Nunca tenta "consertar" estrutura JSON (chaves, colchetes, vírgulas),
+     * apenas remove markdown e normaliza whitespace se necessário.
+     */
     private static String extractJSON(String response) {
         String cleaned = response.trim();
-        
+
+        // Remover markdown code blocks
         if (cleaned.startsWith("```json")) {
             cleaned = cleaned.substring(7);
         } else if (cleaned.startsWith("```")) {
             cleaned = cleaned.substring(3);
         }
-        
+
         if (cleaned.endsWith("```")) {
             cleaned = cleaned.substring(0, cleaned.length() - 3);
         }
-        
+
         cleaned = cleaned.trim();
-        
-        // Fix common JSON formatting issues
-        cleaned = cleaned.replaceAll("\\n\\s*", " ");
-        
-        // Fix missing commas between array/object elements (common AI mistake)
-        cleaned = cleaned.replaceAll("}\\s+\\{", "},{");
-        cleaned = cleaned.replaceAll("}\\s+\\[", "},[");
-        cleaned = cleaned.replaceAll("]\\s+\\{", "],{");
-        cleaned = cleaned.replaceAll("]\\s+\\[", "],[");
-        
-        return cleaned;
+
+        // Tentar parsear como está primeiro (JSON válido não deve ser alterado)
+        try {
+            JsonParser.parseString(cleaned);
+            return cleaned;
+        } catch (Exception e) {
+            // Se falhou, aplicar correções mínimas e seguras
+            SteveMod.LOGGER.warn("JSON parsing failed, attempting safe fixes: {}", e.getMessage());
+
+            // Apenas normalizar whitespace
+            cleaned = cleaned.replaceAll("\\n\\s*", " ");
+
+            return cleaned;
+        }
     }
 
     private static Task parseTask(JsonObject taskObj) {
         if (!taskObj.has("action")) {
             return null;
         }
-        
+
         String action = taskObj.get("action").getAsString();
         Map<String, Object> parameters = new HashMap<>();
-        
+
         if (taskObj.has("parameters") && taskObj.get("parameters").isJsonObject()) {
             JsonObject paramsObj = taskObj.getAsJsonObject("parameters");
-            
+
             for (String key : paramsObj.keySet()) {
                 JsonElement value = paramsObj.get(key);
-                
+
                 if (value.isJsonPrimitive()) {
                     if (value.getAsJsonPrimitive().isNumber()) {
                         parameters.put(key, value.getAsNumber());
@@ -116,7 +122,7 @@ public class ResponseParser {
                 }
             }
         }
-        
+
         return new Task(action, parameters);
     }
 
@@ -144,4 +150,3 @@ public class ResponseParser {
         }
     }
 }
-
