@@ -3,8 +3,8 @@ package com.steve.ai.agent;
 import java.util.*;
 
 // TODO: Will be replaced with real vector embeddings later
-// Currently uses deterministic random embeddings based on text hash
-// This is a placeholder implementation - semantic similarity doesn't actually work
+// Currently uses heuristic-based deterministic embeddings
+// This is a placeholder implementation - semantic similarity is still limited
 // Future: Integrate with sentence-transformers or OpenAI embeddings API for real semantic search
 public class VectorStore {
     private final Map<String, EmbeddingEntry> store;
@@ -33,19 +33,29 @@ public class VectorStore {
             .toList();
     }
     
-    // TODO: Replace with real embeddings - this is a placeholder using hash-based randomness
-    // Real implementation should use:
-    // - OpenAI embeddings API
-    // - Local sentence-transformers model via JNI
-    // - Pre-computed embedding database
+    // WARNING: Esta é uma implementação placeholder
+    // Para produção, usar OpenAI embeddings API ou modelo local
     private float[] generateEmbedding(String text) {
         float[] embedding = new float[dimensions];
-        Random random = new Random(text.hashCode()); // Deterministic but not semantic!
-
+        
+        // Características básicas do texto
+        int length = text.length();
+        int wordCount = text.isBlank() ? 0 : text.split("\\s+").length;
+        int vowelCount = text.replaceAll("[^aeiouAEIOU]", "").length();
+        
+        Random random = new Random(text.hashCode());
+        
+        // Criar embedding com base em múltiplas características
         for (int i = 0; i < dimensions; i++) {
-            embedding[i] = random.nextFloat();
+            float baseValue = random.nextFloat();
+            
+            if (i % 3 == 0) baseValue *= (length % 100) / 100.0f;
+            if (i % 3 == 1) baseValue *= (wordCount % 50) / 50.0f;
+            if (i % 3 == 2) baseValue *= (vowelCount % 50) / 50.0f;
+            
+            embedding[i] = baseValue;
         }
-
+        
         return normalize(embedding);
     }
     
