@@ -78,18 +78,25 @@ public class MineBlockAction extends BaseAction {
             net.minecraft.world.phys.Vec3 eyePos = nearestPlayer.getEyePosition(1.0F);
             net.minecraft.world.phys.Vec3 lookVec = nearestPlayer.getLookAngle();
             
-            double angle = Math.atan2(lookVec.z, lookVec.x) * 180.0 / Math.PI;
-            angle = (angle + 360) % 360;
-            
-            if (angle >= 315 || angle < 45) {
-                miningDirectionX = 1; miningDirectionZ = 0; // East (+X)
-            } else if (angle >= 45 && angle < 135) {
-                miningDirectionX = 0; miningDirectionZ = 1; // South (+Z)
-            } else if (angle >= 135 && angle < 225) {
-                miningDirectionX = -1; miningDirectionZ = 0; // West (-X)
-            } else {
-                miningDirectionX = 0; miningDirectionZ = -1; // North (-Z)
-            }
+double angle = Math.atan2(lookVec.z, lookVec.x) * 180.0 / Math.PI;
+
+// Normalizar ângulo para 0–360
+double normalizedAngle = (angle + 360) % 360;
+
+if (normalizedAngle >= 315 || normalizedAngle < 45) {
+    miningDirectionX = 1; 
+    miningDirectionZ = 0; // East (+X)
+} else if (normalizedAngle >= 45 && normalizedAngle < 135) {
+    miningDirectionX = 0; 
+    miningDirectionZ = 1; // South (+Z)
+} else if (normalizedAngle >= 135 && normalizedAngle < 225) {
+    miningDirectionX = -1; 
+    miningDirectionZ = 0; // West (-X)
+} else {
+    miningDirectionX = 0; 
+    miningDirectionZ = -1; // North (-Z)
+}
+
             
             net.minecraft.world.phys.Vec3 targetPos = eyePos.add(lookVec.scale(3));
             
