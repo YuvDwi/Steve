@@ -48,6 +48,7 @@ public class PromptBuilder {
             6. Keep reasoning under 15 words
             7. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
             8. MINING: Can mine any ore (iron, diamond, coal, etc)
+            9. WAREHOUSE: Material warehouse provides building materials automatically. Steve goes to warehouse when running low.
             %s
 
             EXAMPLES (copy these formats exactly):
@@ -89,6 +90,11 @@ public class PromptBuilder {
             prompt.append("Inventory: [unlimited - creative mode]\n");
         }
         prompt.append("Biome: ").append(worldKnowledge.getBiomeName()).append("\n");
+        if (steve.getWarehousePos() != null) {
+            prompt.append("Warehouse: ").append(formatPosition(steve.getWarehousePos())).append("\n");
+        } else {
+            prompt.append("Warehouse: [none]\n");
+        }
         
         prompt.append("\n=== PLAYER COMMAND ===\n");
         prompt.append("\"").append(command).append("\"\n");

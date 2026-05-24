@@ -1,8 +1,21 @@
 # 可建造结构
 
-Steve 可以通过程序化生成以下结构。使用 `build` 命令指定结构类型。
+Steve 有两种生成结构的方式，按优先级排列：
 
-## 结构列表
+1. **NBT 模板**（优先） — 从文件加载设计师制作的结构
+2. **程序化生成**（兜底） — 通过算法实时生成
+
+## 生成流程
+
+```
+玩家指令 → LLM 解析 → BuildStructureAction
+  ├── 1. tryLoadFromTemplate()    查找 config/steve/structures/*.nbt
+  │     └── 找到 → 使用模板，忽略尺寸参数
+  └── 2. StructureGenerators     NBT 未找到时走程序化生成
+        └── 使用 LLM 传入的 width/height/depth
+```
+
+## 程序化生成结构列表
 
 | 结构类型 | 别名 | 默认尺寸 | 材料 | 说明 |
 |---------|------|---------|------|------|
@@ -14,6 +27,8 @@ Steve 可以通过程序化生成以下结构。使用 `build` 命令指定结�
 | `wall` | — | 用户指定 | 使用第一个材料 | 单层墙壁 |
 | `platform` | — | 用户指定 | 使用第一个材料 | 平台/地板 |
 | `box` | `cube` | 用户指定 | 使用第一个材料 | 实心方块 |
+
+LLM prompt 中暴露给 AI 的程序化类型为 `castle, tower, barn, modern`，其余类型通过代码 switch 兜底匹配。
 
 ## 使用方式
 
@@ -44,12 +59,23 @@ build house with dimensions 12x8x12
 build castle with width 20 height 15 depth 20
 ```
 
-默认尺寸为程序化生成的推荐值。NBT 模板（house, oldhouse, powerplant）使用自动尺寸。
+默认尺寸为程序化生成的推荐值。NBT 模板使用自动尺寸（从文件中读取），自定义尺寸参数会被忽略。
 
 ## NBT 模板
 
-除程序化生成外，还支持从 NBT 模板文件加载结构：
+NBT 模板优先于程序化生成。将 `.nbt` 文件放入运行时配置目录：
 
-- 放置 `.nbt` 文件到 `structures/` 目录
-- 文件名即为结构名（如 `house.nbt`）
-- 优先使用 NBT 模板，找不到时回退到程序化生成
+```
+<minecraft>/config/steve/structures/
+```
+
+- 文件名即为结构名（如 `house.nbt` → `build house`）
+- 支持多种命名格式自动匹配：`name.nbt`、`name_lower.nbt`、`snake_case.nbt`
+- LLM prompt 会动态读取目录下的模板名列表，供 AI 识别
+- 放入 NBT 文件后，对应的程序化生成类型会被"覆盖"（NBT 优先）
+
+## 材料仓库
+
+建造时如果材料不足，Steve 会自动去最近的仓库箱子取材料，取完返回继续建造。仓库箱子内的材料会自动补满（配置的目标数量）。
+
+仓库通过 `config/steve/warehouses.json` 配置，详见 [配置参考 - 材料仓库](03-config.md#材料仓库配置)。

@@ -1,0 +1,27 @@
+{
+  "warehouses": [
+    {
+      "name": "main_base",
+      "spawn": "near_player",
+      "x": 0,
+      "y": 64,
+      "z": 0,
+      "materials": {
+        "stone_bricks": 896,
+        "cobblestone": 896,
+        "oak_planks": 896,
+        "glass_pane": 320,
+        "glass": 320,
+        "quartz_block": 384,
+        "oak_log": 256,
+        "spruce_planks": 256,
+        "smooth_stone": 256,
+        "dark_oak_planks": 256,
+        "dark_oak_stairs": 192,
+        "chiseled_stone_bricks": 128,
+        "oak_door": 64,
+        "torch": 256
+      }
+    }
+  ]
+}

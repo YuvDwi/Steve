@@ -26,6 +26,7 @@
 ### 数据层
 14. [记忆系统](09-memory.md) - 对话历史、世界状态
 15. [可用结构](10-structures.md) - Minecraft 结构参考
+16. [材料仓库](03-config.md#材料仓库配置) - 仓库配置、自动补给
 
 ### 界面层
 16. [Steve GUI](11-steve-gui.md) - 侧边栏聊天界面实现

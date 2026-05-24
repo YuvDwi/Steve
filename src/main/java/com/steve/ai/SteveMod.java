@@ -5,10 +5,14 @@ import com.steve.ai.command.SteveCommands;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
+import com.steve.ai.memory.WarehouseConfig;
+import com.steve.ai.memory.WarehouseManager;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -64,6 +68,19 @@ public class SteveMod {
 
     @SubscribeEvent
     public void onCommandRegister(RegisterCommandsEvent event) {        SteveCommands.register(event.getDispatcher());    }
+
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event) {
+        WarehouseConfig.load();
+        WarehouseManager.init(event.getServer().overworld());
+    }
+
+    @SubscribeEvent
+    public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            WarehouseManager.onPlayerJoined(serverLevel, event.getEntity());
+        }
+    }
 
     public static SteveManager getSteveManager() {
         return steveManager;

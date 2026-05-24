@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 public class BuildStructureAction extends BaseAction {
-    
+
     private String structureType;
     private List<BlockPlacement> buildPlan;
     private int currentBlockIndex;
@@ -38,6 +38,7 @@ public class BuildStructureAction extends BaseAction {
     private int ticksRunning;
     private CollaborativeBuildManager.CollaborativeBuild collaborativeBuild; // For multi-Steve collaboration
     private boolean isCollaborative;
+    private WarehouseRefillHandler refillHandler = new WarehouseRefillHandler();
     private static final int MAX_TICKS = 120000;
     private static final int BLOCKS_PER_TICK = 1;
     private static final double BUILD_SPEED_MULTIPLIER = 1.5;
@@ -207,11 +208,19 @@ public class BuildStructureAction extends BaseAction {
     @Override
     protected void onTick() {
         ticksRunning++;
-        
+
         if (ticksRunning > MAX_TICKS) {
             steve.setFlying(false);
             steve.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
             result = ActionResult.failure("Building timeout");
+            return;
+        }
+
+        if (refillHandler.isRefilling()) {
+            boolean stillRefilling = refillHandler.tick(steve);
+            if (!stillRefilling) {
+                SteveMod.LOGGER.info("Steve '{}' warehouse refill complete, resuming build", steve.getSteveName());
+            }
             return;
         }
         
@@ -242,11 +251,16 @@ public class BuildStructureAction extends BaseAction {
                 boolean creative = SteveConfig.CREATIVE_MODE.get();
                 if (!creative) {
                     if (!steve.hasBlock(placement.block, 1)) {
-                        if (ticksRunning % 60 == 0) {
-                            SteveMod.LOGGER.warn("Steve '{}' has no {} to place! Mining more...",
-                                steve.getSteveName(), placement.block.getName().getString());
+                        Map<Block, Integer> needed = new HashMap<>();
+                        needed.put(placement.block, 64);
+                        boolean started = refillHandler.startRefill(steve, needed);
+                        if (!started) {
+                            if (ticksRunning % 60 == 0) {
+                                SteveMod.LOGGER.warn("Steve '{}' has no {} and no warehouse available!",
+                                    steve.getSteveName(), placement.block.getName().getString());
+                            }
                         }
-                        break; // Stop building, wait for materials
+                        break;
                     }
                     // Consume material from inventory
                     steve.removeBlockFromInventory(placement.block, 1);
@@ -303,6 +317,9 @@ public class BuildStructureAction extends BaseAction {
 
     @Override
     protected void onCancel() {
+        if (refillHandler.isRefilling()) {
+            refillHandler.cancel(steve);
+        }
         steve.setFlying(false);
         steve.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         steve.getNavigation().stop();

@@ -20,7 +20,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
+import com.steve.ai.memory.WarehouseManager;
 import org.jetbrains.annotations.Nullable;
 
 public class SteveEntity extends PathfinderMob {
@@ -34,6 +37,8 @@ public class SteveEntity extends PathfinderMob {
     private int tickCounter = 0;
     private boolean isFlying = false;
     private boolean isInvulnerable = false;
+    private BlockPos warehousePos = null;
+    private static final int RESTOCK_INTERVAL = 100; // 5 seconds
 
     public SteveEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -71,9 +76,14 @@ public class SteveEntity extends PathfinderMob {
     @Override
     public void tick() {
         super.tick();
-        
+
         if (!this.level().isClientSide) {
             actionExecutor.tick();
+
+            tickCounter++;
+            if (tickCounter % RESTOCK_INTERVAL == 0 && this.level() instanceof ServerLevel serverLevel) {
+                WarehouseManager.autoRestockAll(serverLevel);
+            }
         }
     }
 
@@ -93,6 +103,14 @@ public class SteveEntity extends PathfinderMob {
 
     public ActionExecutor getActionExecutor() {
         return this.actionExecutor;
+    }
+
+    public BlockPos getWarehousePos() {
+        return this.warehousePos;
+    }
+
+    public void setWarehousePos(BlockPos pos) {
+        this.warehousePos = pos;
     }
 
     public SimpleContainer getInventory() {
@@ -176,6 +194,10 @@ public class SteveEntity extends PathfinderMob {
             }
         }
         tag.put("Inventory", inventoryTag);
+
+        if (warehousePos != null) {
+            tag.putLong("WarehousePos", warehousePos.asLong());
+        }
     }
 
     @Override
@@ -199,6 +221,10 @@ public class SteveEntity extends PathfinderMob {
                     inventory.setItem(slot, ItemStack.of(slotTag));
                 }
             }
+        }
+
+        if (tag.contains("WarehousePos")) {
+            this.warehousePos = BlockPos.of(tag.getLong("WarehousePos"));
         }
     }
 
