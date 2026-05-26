@@ -3,7 +3,7 @@ package com.steve.ai.event;
 import com.steve.ai.SteveMod;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
-import com.steve.ai.memory.StructureRegistry;
+import com.steve.ai.structure.StructureRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;

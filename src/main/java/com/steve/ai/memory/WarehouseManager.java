@@ -1,36 +1,129 @@
 package com.steve.ai.memory;
 
 import com.steve.ai.SteveMod;
+import com.steve.ai.config.WarehouseConfig;
 import com.steve.ai.entity.SteveEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.saveddata.SavedData;
 
-import net.minecraft.world.entity.player.Player;
-
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class WarehouseManager {
+public class WarehouseManager extends SavedData {
 
-    private static final int RESTOCK_COOLDOWN_TICKS = 6000; // 5 minutes
-    private static long lastRestockGameTime = Long.MIN_VALUE;
+    private static final String DATA_NAME = "steve_warehouses";
+    private static final int RESTOCK_COOLDOWN_TICKS = 6000;
+
+    private final List<WarehouseEntry> entries = new ArrayList<>();
+    private final Map<String, WarehouseEntry> entriesByName = new HashMap<>();
+    private long lastRestockGameTime = Long.MIN_VALUE;
+
+    private static class WarehouseEntry {
+        private final String name;
+        private BlockPos pos;
+        private boolean chestPlaced;
+        private final boolean nearPlayer;
+
+        WarehouseEntry(String name, BlockPos pos, boolean chestPlaced, boolean nearPlayer) {
+            this.name = name;
+            this.pos = pos;
+            this.chestPlaced = chestPlaced;
+            this.nearPlayer = nearPlayer;
+        }
+    }
+
+    public WarehouseManager() {
+    }
+
+    // ── SavedData persistence ──────────────────────────────────────────
+
+    public static WarehouseManager load(CompoundTag tag) {
+        WarehouseManager manager = new WarehouseManager();
+        if (tag.contains("Warehouses", Tag.TAG_LIST)) {
+            ListTag list = tag.getList("Warehouses", Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag entry = list.getCompound(i);
+                manager.addEntry(new WarehouseEntry(
+                        entry.getString("Name"),
+                        new BlockPos(entry.getInt("X"), entry.getInt("Y"), entry.getInt("Z")),
+                        entry.getBoolean("Placed"),
+                        entry.getBoolean("NearPlayer")
+                ));
+            }
+        }
+        manager.lastRestockGameTime = tag.getLong("LastRestockTime");
+        return manager;
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag) {
+        ListTag list = new ListTag();
+        for (WarehouseEntry entry : entries) {
+            CompoundTag e = new CompoundTag();
+            e.putString("Name", entry.name);
+            e.putInt("X", entry.pos.getX());
+            e.putInt("Y", entry.pos.getY());
+            e.putInt("Z", entry.pos.getZ());
+            e.putBoolean("Placed", entry.chestPlaced);
+            e.putBoolean("NearPlayer", entry.nearPlayer);
+            list.add(e);
+        }
+        tag.put("Warehouses", list);
+        tag.putLong("LastRestockTime", lastRestockGameTime);
+        return tag;
+    }
+
+    private static WarehouseManager getOrCreate(ServerLevel level) {
+        return level.getDataStorage().computeIfAbsent(
+                WarehouseManager::load,
+                WarehouseManager::new,
+                DATA_NAME
+        );
+    }
+
+    private void addEntry(WarehouseEntry entry) {
+        entries.add(entry);
+        entriesByName.put(entry.name, entry);
+    }
+
+    private void initFromConfig() {
+        if (!entries.isEmpty()) return;
+
+        for (WarehouseConfig.WarehouseDefinition def : WarehouseConfig.getWarehouses()) {
+            BlockPos pos = def.getFixedPos().orElse(BlockPos.ZERO);
+            addEntry(new WarehouseEntry(def.name, pos, false, def.isNearPlayer()));
+            SteveMod.LOGGER.info("Registered warehouse '{}' (nearPlayer={})", def.name, def.isNearPlayer());
+        }
+        setDirty();
+    }
+
+    // ── Public static API ──────────────────────────────────────────────
 
     public static void init(ServerLevel level) {
-        WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
-        data.initFromConfig();
+        WarehouseManager self = getOrCreate(level);
+        self.initFromConfig();
 
-        for (WarehouseSavedData.WarehouseEntry entry : data.getEntries()) {
+        for (WarehouseEntry entry : self.entries) {
             if (!entry.chestPlaced && !entry.nearPlayer) {
                 if (placeChest(level, entry.pos)) {
-                    data.markPlaced(entry.name);
+                    entry.chestPlaced = true;
+                    self.setDirty();
                     SteveMod.LOGGER.info("Placed warehouse '{}' chest at {}", entry.name, entry.pos);
                 }
             }
@@ -38,9 +131,9 @@ public class WarehouseManager {
     }
 
     public static void onPlayerJoined(ServerLevel level, Player player) {
-        WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
+        WarehouseManager self = getOrCreate(level);
 
-        for (WarehouseSavedData.WarehouseEntry entry : data.getEntries()) {
+        for (WarehouseEntry entry : self.entries) {
             if (!entry.chestPlaced && entry.nearPlayer) {
                 BlockPos playerPos = player.blockPosition();
                 BlockPos placePos = findAirNear(level, playerPos, 5);
@@ -50,60 +143,35 @@ public class WarehouseManager {
                 entry.pos = placePos;
 
                 if (placeChest(level, placePos)) {
-                    data.markPlaced(entry.name);
+                    entry.chestPlaced = true;
                     SteveMod.LOGGER.info("Placed warehouse '{}' chest near player at {}", entry.name, placePos);
                 }
+                self.setDirty();
             }
         }
     }
 
-    private static BlockPos findNearestPlayerPos(ServerLevel level) {
-        Player nearest = null;
-        double nearestDist = Double.MAX_VALUE;
-        for (Player player : level.players()) {
-            if (nearest == null || player.blockPosition().distSqr(BlockPos.ZERO) < nearestDist) {
-                nearest = player;
-                nearestDist = player.blockPosition().distSqr(BlockPos.ZERO);
+    public static void autoRestockAll(ServerLevel level) {
+        WarehouseManager self = getOrCreate(level);
+
+        long gameTime = level.getGameTime();
+        if (gameTime - self.lastRestockGameTime < RESTOCK_COOLDOWN_TICKS) return;
+        self.lastRestockGameTime = gameTime;
+        self.setDirty();
+
+        for (WarehouseEntry entry : self.entries) {
+            if (!entry.chestPlaced) continue;
+
+            Container chest = getChestContainer(level, entry.pos);
+            if (chest == null) continue;
+
+            WarehouseConfig.WarehouseDefinition def = WarehouseConfig.getWarehouse(entry.name);
+            if (def == null) continue;
+
+            for (Map.Entry<String, Integer> mat : def.materials.entrySet()) {
+                restockMaterial(chest, mat.getKey(), mat.getValue());
             }
         }
-        return nearest != null ? nearest.blockPosition() : null;
-    }
-
-    private static BlockPos findAirNear(ServerLevel level, BlockPos center, int radius) {
-        for (int dy = 0; dy <= radius; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    BlockPos check = center.offset(dx, dy, dz);
-                    if (level.isLoaded(check) && level.getBlockState(check).isAir()
-                            && level.getBlockState(check.below()).isSolid()) {
-                        return check;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    public static boolean placeChest(ServerLevel level, BlockPos pos) {
-        if (!level.isLoaded(pos)) return false;
-
-        BlockState current = level.getBlockState(pos);
-        if (!current.isAir()) {
-            SteveMod.LOGGER.warn("Cannot place warehouse chest at {}, block already exists: {}", pos, current);
-            return false;
-        }
-
-        level.setBlock(pos, Blocks.CHEST.defaultBlockState(), 3);
-        return true;
-    }
-
-    public static Container getChestContainer(ServerLevel level, BlockPos pos) {
-        if (!level.isLoaded(pos)) return null;
-        BlockEntity be = level.getBlockEntity(pos);
-        if (be instanceof Container container) {
-            return container;
-        }
-        return null;
     }
 
     public static int withdrawItem(ServerLevel level, BlockPos warehousePos,
@@ -134,53 +202,51 @@ public class WarehouseManager {
         return maxCount - remaining;
     }
 
-    public static int depositItem(ServerLevel level, BlockPos warehousePos,
-                                   SteveEntity steve, Block block, int maxCount) {
-        Container chest = getChestContainer(level, warehousePos);
-        if (chest == null) return 0;
-
-        ItemStack target = new ItemStack(block.asItem());
-        int remaining = maxCount;
-
-        for (int i = 0; i < steve.getInventory().getContainerSize() && remaining > 0; i++) {
-            ItemStack slot = steve.getInventory().getItem(i);
-            if (slot.isEmpty()) continue;
-            if (!ItemStack.isSameItemSameTags(slot, target)) continue;
-
-            int take = Math.min(remaining, slot.getCount());
-            ItemStack toDeposit = slot.copy();
-            toDeposit.setCount(take);
-            int notAdded = addItemToContainer(chest, toDeposit);
-            int deposited = take - notAdded;
-
-            slot.shrink(deposited);
-            remaining -= deposited;
-        }
-
-        chest.setChanged();
-        return maxCount - remaining;
+    public static Optional<BlockPos> findNearest(ServerLevel level, BlockPos from) {
+        WarehouseManager self = getOrCreate(level);
+        return self.entries.stream()
+                .filter(e -> e.chestPlaced)
+                .map(e -> e.pos)
+                .min((a, b) -> Double.compare(a.distSqr(from), b.distSqr(from)));
     }
 
-    public static void autoRestockAll(ServerLevel level) {
-        long gameTime = level.getGameTime();
-        if (gameTime - lastRestockGameTime < RESTOCK_COOLDOWN_TICKS) return;
-        lastRestockGameTime = gameTime;
+    // ── Private helpers ────────────────────────────────────────────────
 
-        WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
-
-        for (WarehouseSavedData.WarehouseEntry entry : data.getEntries()) {
-            if (!entry.chestPlaced) continue;
-
-            Container chest = getChestContainer(level, entry.pos);
-            if (chest == null) continue;
-
-            WarehouseConfig.WarehouseDefinition def = WarehouseConfig.getWarehouse(entry.name);
-            if (def == null) continue;
-
-            for (Map.Entry<String, Integer> mat : def.materials.entrySet()) {
-                restockMaterial(chest, mat.getKey(), mat.getValue());
+    private static BlockPos findAirNear(ServerLevel level, BlockPos center, int radius) {
+        for (int dy = 0; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    BlockPos check = center.offset(dx, dy, dz);
+                    if (level.isLoaded(check) && level.getBlockState(check).isAir()
+                            && level.getBlockState(check.below()).isSolid()) {
+                        return check;
+                    }
+                }
             }
         }
+        return null;
+    }
+
+    private static boolean placeChest(ServerLevel level, BlockPos pos) {
+        if (!level.isLoaded(pos)) return false;
+
+        BlockState current = level.getBlockState(pos);
+        if (!current.isAir()) {
+            SteveMod.LOGGER.warn("Cannot place warehouse chest at {}, block already exists: {}", pos, current);
+            return false;
+        }
+
+        level.setBlock(pos, Blocks.CHEST.defaultBlockState(), 3);
+        return true;
+    }
+
+    private static Container getChestContainer(ServerLevel level, BlockPos pos) {
+        if (!level.isLoaded(pos)) return null;
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof Container container) {
+            return container;
+        }
+        return null;
     }
 
     private static void restockMaterial(Container chest, String materialId, int targetCount) {
@@ -232,10 +298,5 @@ public class WarehouseManager {
 
         chest.setChanged();
         return remaining.getCount();
-    }
-
-    public static Optional<BlockPos> findNearest(ServerLevel level, BlockPos from) {
-        WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
-        return data.findNearest(from);
     }
 }

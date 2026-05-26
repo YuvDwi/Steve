@@ -6,7 +6,7 @@ import com.steve.ai.action.CollaborativeBuildManager;
 import com.steve.ai.action.Task;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
-import com.steve.ai.memory.StructureRegistry;
+import com.steve.ai.structure.StructureRegistry;
 import com.steve.ai.structure.BlockPlacement;
 import com.steve.ai.structure.StructureTemplateLoader;
 import net.minecraft.core.BlockPos;

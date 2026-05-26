@@ -1,11 +1,11 @@
-package com.steve.ai.memory;
+package com.steve.ai.config;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.steve.ai.SteveMod;
+import net.minecraft.core.BlockPos;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.*;
@@ -16,35 +16,35 @@ public class WarehouseConfig {
 
     public static class WarehouseDefinition {
         public final String name;
-        public final String spawn; // "fixed" or "near_player"
-        public final int x, y, z;
+        public final String spawn;
+        private final BlockPos fixedPos;
         public final Map<String, Integer> materials;
 
-        public WarehouseDefinition(String name, String spawn, int x, int y, int z, Map<String, Integer> materials) {
+        public WarehouseDefinition(String name, String spawn, BlockPos fixedPos, Map<String, Integer> materials) {
             this.name = name;
             this.spawn = spawn;
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.materials = materials;
+            this.fixedPos = fixedPos;
+            this.materials = Collections.unmodifiableMap(materials);
         }
 
         public boolean isNearPlayer() {
             return "near_player".equalsIgnoreCase(spawn);
         }
+
+        public Optional<BlockPos> getFixedPos() {
+            return Optional.ofNullable(fixedPos);
+        }
     }
 
     private static List<WarehouseDefinition> warehouses = new ArrayList<>();
+    private static Map<String, WarehouseDefinition> warehousesByName = new HashMap<>();
 
     public static List<WarehouseDefinition> getWarehouses() {
         return warehouses;
     }
 
     public static WarehouseDefinition getWarehouse(String name) {
-        return warehouses.stream()
-                .filter(w -> w.name.equals(name))
-                .findFirst()
-                .orElse(null);
+        return warehousesByName.get(name);
     }
 
     public static void load() {
@@ -73,14 +73,20 @@ public class WarehouseConfig {
         JsonArray warehouseArray = root.getAsJsonArray("warehouses");
 
         warehouses.clear();
+        warehousesByName.clear();
 
         for (JsonElement element : warehouseArray) {
             JsonObject obj = element.getAsJsonObject();
             String name = obj.get("name").getAsString();
             String spawn = obj.has("spawn") ? obj.get("spawn").getAsString() : "fixed";
-            int x = obj.has("x") ? obj.get("x").getAsInt() : 0;
-            int y = obj.has("y") ? obj.get("y").getAsInt() : 64;
-            int z = obj.has("z") ? obj.get("z").getAsInt() : 0;
+
+            BlockPos fixedPos = null;
+            if (!"near_player".equalsIgnoreCase(spawn)) {
+                int x = obj.has("x") ? obj.get("x").getAsInt() : 0;
+                int y = obj.has("y") ? obj.get("y").getAsInt() : 64;
+                int z = obj.has("z") ? obj.get("z").getAsInt() : 0;
+                fixedPos = new BlockPos(x, y, z);
+            }
 
             Map<String, Integer> materials = new HashMap<>();
             JsonObject matsObj = obj.getAsJsonObject("materials");
@@ -88,7 +94,9 @@ public class WarehouseConfig {
                 materials.put(entry.getKey(), entry.getValue().getAsInt());
             }
 
-            warehouses.add(new WarehouseDefinition(name, spawn, x, y, z, materials));
+            WarehouseDefinition def = new WarehouseDefinition(name, spawn, fixedPos, materials);
+            warehouses.add(def);
+            warehousesByName.put(name, def);
         }
     }
 

@@ -5,7 +5,7 @@ import com.steve.ai.command.SteveCommands;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
-import com.steve.ai.memory.WarehouseConfig;
+import com.steve.ai.config.WarehouseConfig;
 import com.steve.ai.memory.WarehouseManager;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
