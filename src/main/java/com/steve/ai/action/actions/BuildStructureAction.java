@@ -8,7 +8,6 @@ import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.memory.StructureRegistry;
 import com.steve.ai.structure.BlockPlacement;
-import com.steve.ai.structure.StructureGenerators;
 import com.steve.ai.structure.StructureTemplateLoader;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -40,8 +39,6 @@ public class BuildStructureAction extends BaseAction {
     private boolean isCollaborative;
     private WarehouseRefillHandler refillHandler = new WarehouseRefillHandler();
     private static final int MAX_TICKS = 120000;
-    private static final int BLOCKS_PER_TICK = 1;
-    private static final double BUILD_SPEED_MULTIPLIER = 1.5;
 
     public BuildStructureAction(SteveEntity steve, Task task) {
         super(steve, task);
@@ -149,11 +146,8 @@ public class BuildStructureAction extends BaseAction {
         BlockPos clearPos = groundPos;
         
         buildPlan = tryLoadFromTemplate(structureType, clearPos);
-        
-        if (buildPlan == null) {
-            // Fall back to procedural generation
-            buildPlan = generateBuildPlan(structureType, clearPos, width, height, depth);
-        } else {
+
+        if (buildPlan != null) {
             SteveMod.LOGGER.info("Loaded '{}' from NBT template with {} blocks", structureType, buildPlan.size());
         }
         
@@ -233,18 +227,18 @@ public class BuildStructureAction extends BaseAction {
                 return;
             }
             
-            for (int i = 0; i < BLOCKS_PER_TICK; i++) {
-                BlockPlacement placement = 
-                    CollaborativeBuildManager.getNextBlock(collaborativeBuild, steve.getSteveName());
-                
-                if (placement == null) {
-                    if (ticksRunning % 20 == 0) {
-                        SteveMod.LOGGER.info("Steve '{}' has no more blocks! Build {}% complete", 
-                            steve.getSteveName(), collaborativeBuild.getProgressPercentage());
-                    }
-                    break;
+            int buildDelay = SteveConfig.BUILD_TICK_DELAY.get();
+            if (ticksRunning % buildDelay != 0) return;
+
+            BlockPlacement placement =
+                CollaborativeBuildManager.getNextBlock(collaborativeBuild, steve.getSteveName());
+
+            if (placement == null) {
+                if (ticksRunning % 20 == 0) {
+                    SteveMod.LOGGER.info("Steve '{}' has no more blocks! Build {}% complete",
+                        steve.getSteveName(), collaborativeBuild.getProgressPercentage());
                 }
-                
+            } else {
                 BlockPos pos = placement.pos;
 
                 // Check material (skip in creative mode)
@@ -260,10 +254,10 @@ public class BuildStructureAction extends BaseAction {
                                     steve.getSteveName(), placement.block.getName().getString());
                             }
                         }
-                        break;
+                    } else {
+                        // Consume material from inventory
+                        steve.removeBlockFromInventory(placement.block, 1);
                     }
-                    // Consume material from inventory
-                    steve.removeBlockFromInventory(placement.block, 1);
                 }
 
                 double distance = Math.sqrt(steve.blockPosition().distSqr(pos));
@@ -280,11 +274,11 @@ public class BuildStructureAction extends BaseAction {
 
                 BlockState blockState = placement.block.defaultBlockState();
                 steve.level().setBlock(pos, blockState, 3);
-                
-                SteveMod.LOGGER.info("Steve '{}' PLACED BLOCK at {} - Total: {}/{}", 
-                    steve.getSteveName(), pos, collaborativeBuild.getBlocksPlaced(), 
+
+                SteveMod.LOGGER.info("Steve '{}' PLACED BLOCK at {} - Total: {}/{}",
+                    steve.getSteveName(), pos, collaborativeBuild.getBlocksPlaced(),
                     collaborativeBuild.getTotalBlocks());
-                
+
                 // Particles and sound
                 if (steve.level() instanceof ServerLevel serverLevel) {
                     serverLevel.sendParticles(
@@ -292,9 +286,9 @@ public class BuildStructureAction extends BaseAction {
                         pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
                         15, 0.4, 0.4, 0.4, 0.15
                     );
-                    
+
                     var soundType = blockState.getSoundType(steve.level(), pos, steve);
-                    steve.level().playSound(null, pos, soundType.getPlaceSound(), 
+                    steve.level().playSound(null, pos, soundType.getPlaceSound(),
                         SoundSource.BLOCKS, 1.0f, soundType.getPitch());
                 }
             }
@@ -328,11 +322,6 @@ public class BuildStructureAction extends BaseAction {
     @Override
     public String getDescription() {
         return "Build " + structureType + " (" + currentBlockIndex + "/" + (buildPlan != null ? buildPlan.size() : 0) + ")";
-    }
-
-    private List<BlockPlacement> generateBuildPlan(String type, BlockPos start, int width, int height, int depth) {
-        // Delegate to centralized StructureGenerators utility
-        return StructureGenerators.generate(type, start, width, height, depth, buildMaterials);
     }
 
     /**

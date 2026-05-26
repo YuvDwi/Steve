@@ -20,6 +20,9 @@ import java.util.Optional;
 
 public class WarehouseManager {
 
+    private static final int RESTOCK_COOLDOWN_TICKS = 6000; // 5 minutes
+    private static long lastRestockGameTime = Long.MIN_VALUE;
+
     public static void init(ServerLevel level) {
         WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
         data.initFromConfig();
@@ -159,6 +162,10 @@ public class WarehouseManager {
     }
 
     public static void autoRestockAll(ServerLevel level) {
+        long gameTime = level.getGameTime();
+        if (gameTime - lastRestockGameTime < RESTOCK_COOLDOWN_TICKS) return;
+        lastRestockGameTime = gameTime;
+
         WarehouseSavedData data = WarehouseSavedData.getOrCreate(level);
 
         for (WarehouseSavedData.WarehouseEntry entry : data.getEntries()) {

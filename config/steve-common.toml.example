@@ -25,3 +25,7 @@
     # Maximum number of Steves that can be active simultaneously
     maxActiveSteves = 10
 
+    # Ticks between each block placement during building (20 ticks = 1 second)
+    # 1 = fastest (20 blocks/sec), 20 = 1 block/sec (default), 100 = 1 block/5sec
+    buildTickDelay = 20
+

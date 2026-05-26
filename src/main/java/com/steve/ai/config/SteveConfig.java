@@ -14,6 +14,7 @@ public class SteveConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_CHAT_RESPONSES;
     public static final ForgeConfigSpec.BooleanValue CREATIVE_MODE;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STEVES;
+    public static final ForgeConfigSpec.IntValue BUILD_TICK_DELAY;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -67,6 +68,10 @@ public class SteveConfig {
         MAX_ACTIVE_STEVES = builder
             .comment("Maximum number of Steves that can be active simultaneously")
             .defineInRange("maxActiveSteves", 10, 1, 50);
+
+        BUILD_TICK_DELAY = builder
+            .comment("Ticks between each block placement during building (20 ticks = 1 second, default 20 = 1 block/sec)")
+            .defineInRange("buildTickDelay", 20, 1, 200);
         
         builder.pop();
 

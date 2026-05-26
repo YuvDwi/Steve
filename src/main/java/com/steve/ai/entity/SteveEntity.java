@@ -38,7 +38,7 @@ public class SteveEntity extends PathfinderMob {
     private boolean isFlying = false;
     private boolean isInvulnerable = false;
     private BlockPos warehousePos = null;
-    private static final int RESTOCK_INTERVAL = 100; // 5 seconds
+    private static final int RESTOCK_INTERVAL = 1200; // 1 minute
 
     public SteveEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
