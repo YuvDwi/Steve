@@ -229,7 +229,7 @@ public class TaskPlanner {
             case "attack" -> task.hasParameters("target");
             case "follow" -> task.hasParameters("player");
             case "gather" -> task.hasParameters("resource", "quantity");
-            case "build" -> task.hasParameters("structure", "blocks", "dimensions");
+            case "build" -> task.hasParameters("structure");
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", action);
                 yield false;

@@ -76,6 +76,8 @@ dependencies {
     // Apache Commons for SHA-256 hashing (cache keys)
     implementation 'commons-codec:commons-codec:1.16.0'
 
+    implementation 'io.modelcontextprotocol.sdk:mcp:2.0.0-M3'
+
     // JUnit 5 for testing
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
