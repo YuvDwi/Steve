@@ -1,13 +1,12 @@
 package com.steve.ai.memory;
 
 import com.steve.ai.entity.SteveEntity;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
+import com.steve.ai.mcp.MCPToolRegistry;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 
 public class SteveMemory {
@@ -39,45 +38,39 @@ public class SteveMemory {
         }
     }
 
+    /**
+     * Query long-term memory from mempalace.
+     */
+    public String queryLongTermMemory(String query) {
+        try {
+            MCPToolRegistry registry = MCPToolRegistry.getInstance();
+            if (registry == null) return "";
+
+            return registry.callTool("mempalace:mempalace_query", Map.of(
+                "wing", "steve_memory",
+                "room", steve.getSteveName(),
+                "query", query
+            ));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     public List<String> getRecentActions(int count) {
         int size = Math.min(count, recentActions.size());
         List<String> result = new ArrayList<>();
-        
+
         int startIndex = Math.max(0, recentActions.size() - count);
         for (int i = startIndex; i < recentActions.size(); i++) {
             result.add(recentActions.get(i));
         }
-        
+
         return result;
     }
 
     public void clearTaskQueue() {
         taskQueue.clear();
         currentGoal = "";
-    }
-
-    public void saveToNBT(CompoundTag tag) {
-        tag.putString("CurrentGoal", currentGoal);
-        
-        ListTag actionsList = new ListTag();
-        for (String action : recentActions) {
-            actionsList.add(StringTag.valueOf(action));
-        }
-        tag.put("RecentActions", actionsList);
-    }
-
-    public void loadFromNBT(CompoundTag tag) {
-        if (tag.contains("CurrentGoal")) {
-            currentGoal = tag.getString("CurrentGoal");
-        }
-        
-        if (tag.contains("RecentActions")) {
-            recentActions.clear();
-            ListTag actionsList = tag.getList("RecentActions", 8); // 8 = String type
-            for (int i = 0; i < actionsList.size(); i++) {
-                recentActions.add(actionsList.getString(i));
-            }
-        }
     }
 }
 

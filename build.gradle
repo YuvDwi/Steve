@@ -98,6 +98,7 @@ dependencies {
     shadowLibs 'io.github.resilience4j:resilience4j-retry:2.1.0'
     shadowLibs 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
     shadowLibs 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+    shadowLibs 'io.modelcontextprotocol.sdk:mcp:2.0.0-M3'
     // commons-codec is already in Forge - no need to shade
 }
 

@@ -180,7 +180,6 @@ public class SteveEntity extends PathfinderMob {
         tag.putString("SteveName", this.steveName);
 
         CompoundTag memoryTag = new CompoundTag();
-        this.memory.saveToNBT(memoryTag);
         tag.put("Memory", memoryTag);
 
         ListTag inventoryTag = new ListTag();
@@ -205,10 +204,6 @@ public class SteveEntity extends PathfinderMob {
         super.readAdditionalSaveData(tag);
         if (tag.contains("SteveName")) {
             this.setSteveName(tag.getString("SteveName"));
-        }
-
-        if (tag.contains("Memory")) {
-            this.memory.loadFromNBT(tag.getCompound("Memory"));
         }
 
         if (tag.contains("Inventory")) {

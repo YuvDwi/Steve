@@ -1,8 +1,12 @@
 package com.steve.ai.llm;
 
+import com.steve.ai.SteveMod;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
+import com.steve.ai.memory.SteveMemory;
 import com.steve.ai.memory.WorldKnowledge;
+import com.steve.ai.mcp.MCPToolConverter;
+import com.steve.ai.mcp.MCPToolRegistry;
 import com.steve.ai.structure.StructureTemplateLoader;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.SimpleContainer;
@@ -36,6 +40,7 @@ public class PromptBuilder {
             5. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
             6. MINING: Can mine any ore (iron, diamond, coal, etc)
             7. WAREHOUSE: Material warehouse provides building materials automatically. Steve goes to warehouse when running low.
+            8. MCP TOOLS: Use "mcp" action to call external tools: {"action": "mcp", "parameters": {"tool": "serverName:toolName", "args": {...}}}
             %s
 
             EXAMPLES (copy these formats exactly):
@@ -59,7 +64,10 @@ public class PromptBuilder {
             {"reasoning": "Player needs me", "plan": "Follow player", "tasks": [{"action": "follow", "parameters": {"player": "USE_NEARBY_PLAYER_NAME"}}]}
 
             CRITICAL: Output ONLY valid JSON. No markdown, no explanations, no line breaks in JSON.
-            """.formatted(getAvailableTemplates(), getMaterialRule());
+
+            AVAILABLE MCP TOOLS:
+            %s
+            """.formatted(getAvailableTemplates(), getMaterialRule(), getMcpToolsPrompt());
     }
 
     private static String getAvailableTemplates() {
@@ -75,6 +83,25 @@ public class PromptBuilder {
             return "10. CREATIVE MODE: Unlimited materials. NEVER mine before building. Build directly.";
         }
         return "10. SURVIVAL MODE: Steve has a 36-slot inventory. Mined blocks go into inventory. Building consumes from inventory. If inventory is empty, mine materials first before building.";
+    }
+
+    private static String getMcpToolsPrompt() {
+        if (!SteveConfig.MCP_ENABLED.get()) {
+            return "(none - MCP is disabled in config)";
+        }
+        try {
+            MCPToolRegistry registry = MCPToolRegistry.getInstance();
+            if (registry == null) {
+                return "(none - MCP registry not initialized)";
+            }
+            List<MCPToolConverter.ToolInfo> tools = registry.getAllTools();
+            if (tools.isEmpty()) {
+                return "(none - no MCP servers connected)";
+            }
+            return MCPToolConverter.toPromptSection(tools);
+        } catch (Exception e) {
+            return "(none - error loading MCP tools)";
+        }
     }
 
     public static String buildUserPrompt(SteveEntity steve, String command, WorldKnowledge worldKnowledge) {

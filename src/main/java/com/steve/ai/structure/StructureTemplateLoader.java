@@ -1,6 +1,7 @@
 package com.steve.ai.structure;
 
 import com.steve.ai.SteveMod;
+import com.steve.ai.mcp.MCPClientWrapper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Loads Minecraft structure templates from NBT files for sequential block-by-block placement
@@ -168,13 +170,43 @@ public class StructureTemplateLoader {
             File[] files = structuresDir.listFiles((dir, name) -> name.endsWith(".nbt"));
             if (files != null) {
                 for (File file : files) {
-                    structures.add(file.getName().replace(".nbt", ""));
+                    String name = file.getName().replace(".nbt", "");
+                    structures.add(name);
+                    registerStructureToMempalace(file, name);
                 }
             }
         }
 
         SteveMod.LOGGER.info("Available NBT structures: {}", structures);
         return structures;
+    }
+
+    /**
+     * Register structure template to mempalace
+     */
+    private static void registerStructureToMempalace(File file, String name) {
+        try {
+            LoadedTemplate template = loadFromFile(file, name);
+            if (template == null) return;
+
+            MCPClientWrapper client = new MCPClientWrapper("mempalace", "http://localhost:6060");
+            client.initialize();
+
+            String content = String.format("Structure '%s' %dx%dx%d with %d blocks",
+                template.name, template.width, template.height, template.depth, template.blocks.size());
+
+            client.callTool("mempalace_add_drawer", Map.of(
+                "wing", "structure_templates",
+                "room", template.name,
+                "content", content,
+                "added_by", "steve-ai"
+            ));
+
+            client.close();
+            SteveMod.LOGGER.info("Registered structure template '{}' to mempalace", template.name);
+        } catch (Exception e) {
+            SteveMod.LOGGER.warn("Failed to register structure to mempalace: {}", e.getMessage());
+        }
     }
 }
 

@@ -195,7 +195,7 @@ public class BuildStructureAction extends BaseAction {
         
         steve.setFlying(true);
         
-        SteveMod.LOGGER.info("Steve '{}' starting COLLABORATIVE build of {} at {} with {} blocks using materials: {} [FLYING ENABLED]", 
+        SteveMod.LOGGER.info("Steve '{}' starting COLLABORATIVE build of {} at {} with {} blocks using materials: {} [FLYING ENABLED]",
             steve.getSteveName(), structureType, clearPos, buildPlan.size(), buildMaterials);
     }
 

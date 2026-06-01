@@ -29,3 +29,13 @@
     # 1 = fastest (20 blocks/sec), 20 = 1 block/sec (default), 100 = 1 block/5sec
     buildTickDelay = 20
 
+[mcp]
+    # Enable MCP tool calling
+    enabled = true
+
+    # JSON array of MCP server configurations
+    # Example: [{"name":"mempalace","url":"http://localhost:6060"}]
+    servers = "[{\"name\":\"mempalace\",\"url\":\"http://localhost:6060\"}]"
+
+    # MCP tool call timeout in milliseconds (1000 ~ 120000)
+    timeoutMs = 30000

@@ -220,7 +220,7 @@ public class TaskPlanner {
 
     public boolean validateTask(Task task) {
         String action = task.getAction();
-        
+
         return switch (action) {
             case "pathfind" -> task.hasParameters("x", "y", "z");
             case "mine" -> task.hasParameters("block", "quantity");
@@ -230,6 +230,7 @@ public class TaskPlanner {
             case "follow" -> task.hasParameters("player");
             case "gather" -> task.hasParameters("resource", "quantity");
             case "build" -> task.hasParameters("structure");
+            case "mcp" -> task.hasParameters("tool");
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", action);
                 yield false;

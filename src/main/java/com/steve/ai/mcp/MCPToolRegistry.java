@@ -17,27 +17,39 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MCPToolRegistry {
 
+    private static MCPToolRegistry INSTANCE;
+
     private static final Gson GSON = new Gson();
     private final Map<String, MCPClientWrapper> clients = new ConcurrentHashMap<>();
     private final Map<String, List<MCPToolConverter.ToolInfo>> toolsByServer = new ConcurrentHashMap<>();
 
-    public MCPToolRegistry() {
-        initialize();
+    public static void init() {
+        if (INSTANCE == null) {
+            INSTANCE = new MCPToolRegistry();
+        }
     }
 
-    private void initialize() {
-        if (!SteveConfig.MCP_ENABLED.get()) {
-            SteveMod.LOGGER.info("MCP is disabled in config");
-            return;
-        }
+    public static MCPToolRegistry getInstance() {
+        return INSTANCE;
+    }
 
-        String serversJson = SteveConfig.MCP_SERVERS.get();
-        if (serversJson == null || serversJson.isEmpty() || serversJson.equals("[]")) {
-            SteveMod.LOGGER.info("No MCP servers configured");
-            return;
-        }
+    private MCPToolRegistry() {
+        doInitialize();
+    }
 
+    private void doInitialize() {
         try {
+            if (!SteveConfig.MCP_ENABLED.get()) {
+                SteveMod.LOGGER.info("MCP is disabled in config");
+                return;
+            }
+
+            String serversJson = SteveConfig.MCP_SERVERS.get();
+            if (serversJson == null || serversJson.isEmpty() || serversJson.equals("[]")) {
+                SteveMod.LOGGER.info("No MCP servers configured");
+                return;
+            }
+
             Type listType = new TypeToken<List<ServerConfig>>() {}.getType();
             List<ServerConfig> servers = GSON.fromJson(serversJson, listType);
 
@@ -49,8 +61,21 @@ public class MCPToolRegistry {
 
                 List<MCPToolConverter.ToolInfo> tools = client.listTools();
                 toolsByServer.put(server.name, tools);
-                SteveMod.LOGGER.info("MCP server '{}' has {} tools", server.name, tools.size());
+                SteveMod.LOGGER.info("MCP server '{}' has {} tools: {}", server.name, tools.size(), tools);
+
+                // Log detailed tool info
+                for (MCPToolConverter.ToolInfo tool : tools) {
+                    SteveMod.LOGGER.info("  - {}: {} (inputSchema: {})", tool.name(), tool.description(), tool.inputSchema());
+                }
             }
+
+            // Log summary of all MCP capabilities
+            List<MCPToolConverter.ToolInfo> allTools = getAllTools();
+            SteveMod.LOGGER.info("=== MCP Capabilities Summary: {} total tools ===", allTools.size());
+            for (MCPToolConverter.ToolInfo tool : allTools) {
+                SteveMod.LOGGER.info("  [{}] {}", tool.name(), tool.description());
+            }
+            SteveMod.LOGGER.info("===========================================");
         } catch (Exception e) {
             SteveMod.LOGGER.error("Failed to initialize MCP servers", e);
         }

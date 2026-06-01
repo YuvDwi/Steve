@@ -21,8 +21,28 @@ public class MCPClientWrapperTest {
         client.initialize();
 
         try {
-            Thread.sleep(2000); // Wait for initialization
             assertTrue(client.isInitialized(), "MCP client should be initialized");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void testListTools() throws Exception {
+        MCPClientWrapper client = new MCPClientWrapper(SERVER_NAME, SERVER_URL);
+        client.initialize();
+
+        try {
+            assertTrue(client.isInitialized(), "MCP client should be initialized");
+
+            List<MCPToolConverter.ToolInfo> tools = client.listTools();
+            assertNotNull(tools, "Tools list should not be null");
+            assertFalse(tools.isEmpty(), "Tools list should not be empty");
+
+            System.out.println("Found " + tools.size() + " tools:");
+            for (MCPToolConverter.ToolInfo tool : tools) {
+                System.out.println("  - " + tool.name() + ": " + tool.description());
+            }
         } finally {
             client.close();
         }
@@ -34,7 +54,6 @@ public class MCPClientWrapperTest {
         client.initialize();
 
         try {
-            Thread.sleep(2000);
             assertTrue(client.isInitialized(), "MCP client should be initialized");
 
             // Example tool call with arguments - adjust based on actual mempalace tools
@@ -52,7 +71,6 @@ public class MCPClientWrapperTest {
         client.initialize();
 
         try {
-            Thread.sleep(2000);
             assertTrue(client.isInitialized(), "MCP client should be initialized");
 
             // Test mempalace_add_drawer tool

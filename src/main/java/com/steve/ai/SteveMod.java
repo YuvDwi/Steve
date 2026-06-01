@@ -7,6 +7,7 @@ import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
 import com.steve.ai.config.WarehouseConfig;
 import com.steve.ai.memory.WarehouseManager;
+import com.steve.ai.mcp.MCPToolRegistry;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.common.MinecraftForge;
@@ -73,6 +74,7 @@ public class SteveMod {
     public void onServerStarting(ServerStartingEvent event) {
         WarehouseConfig.load();
         WarehouseManager.init(event.getServer().overworld());
+        MCPToolRegistry.init();
     }
 
     @SubscribeEvent

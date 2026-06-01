@@ -374,6 +374,7 @@ public class ActionExecutor {
             case "follow" -> new FollowPlayerAction(steve, task);
             case "gather" -> new GatherResourceAction(steve, task);
             case "build" -> new BuildStructureAction(steve, task);
+            case "mcp" -> new MCPAction(steve, task);
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
                 yield null;
