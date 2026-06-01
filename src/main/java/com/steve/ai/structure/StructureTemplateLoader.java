@@ -202,6 +202,12 @@ public class StructureTemplateLoader {
                 "added_by", "steve-ai"
             ));
 
+            // Verify by querying back
+            String queryResult = client.callTool("mempalace_list_drawers", Map.of(
+                "wing", "structure_templates"
+            ));
+            SteveMod.LOGGER.info("Query mempalace after register: {}", queryResult);
+
             client.close();
             SteveMod.LOGGER.info("Registered structure template '{}' to mempalace", template.name);
         } catch (Exception e) {
