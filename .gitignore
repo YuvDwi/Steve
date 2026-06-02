@@ -5,6 +5,7 @@ build/
 .gradle/
 bin/
 out/
+logs
 
 # IDE
 .idea/
