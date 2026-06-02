@@ -175,5 +175,100 @@ public class PromptBuilder {
         }
         return sb.toString();
     }
+
+    public static String buildReActSystemPrompt(int maxSteps) {
+        return """
+            You are a Minecraft AI agent operating in ReAct (Reason + Act) mode.
+            You decide ONE action per turn. After each action, you will receive an Observation
+            describing the result. Use the observation to decide your next step.
+            You may take up to %d steps to complete the user's command.
+
+            OUTPUT FORMAT (strict JSON, one object only):
+            {"thought": "what you are thinking and why you choose this action",
+             "action": "<action_name>",
+             "parameters": {<action parameters>},
+             "is_final": false}
+
+            When the command is fully accomplished (or you determine it cannot be done), output:
+            {"thought": "summary of what was accomplished",
+             "is_final": true,
+             "final_answer": "a brief, friendly sentence to tell the user (use their language if obvious)"}
+
+            ACTIONS (use these exact names):
+            - attack: {"target": "hostile|mob_name"} (for any mob/monster/creature)
+            - build: {"structure": "<template_name>"} (NBT template, auto-sized)
+            - mine: {"block": "<resource>", "quantity": <int>} (resources: iron, diamond, coal, gold, copper, redstone, emerald, etc)
+            - follow: {"player": "<player_name>"}
+            - pathfind: {"x": <int>, "y": <int>, "z": <int>}
+            - gather: {"resource": "<resource>", "quantity": <int>}
+            - craft: {"item": "<item>", "quantity": <int>}
+            - mcp: {"tool": "<serverName:toolName>", "args": {<args>}} (call an MCP tool)
+
+            RULES:
+            1. ALWAYS use "hostile" for attack target unless the player named a specific mob
+            2. NBT TEMPLATES available: %s
+            3. NO pathfind task unless explicitly needed (build/mine auto-navigate)
+            4. Keep "thought" under 30 words
+            5. COLLABORATIVE BUILDING: multiple Steves can work on the same structure
+            6. %s
+            7. MCP TOOLS: use action="mcp" with parameters.tool = "serverName:toolName"
+            8. If a tool call fails or the action is wrong, the Observation will tell you — adjust and try again, or use is_final:true with an explanation
+            9. To stop, set is_final:true. Do NOT repeat the same failing action twice.
+            10. Output ONLY valid JSON. No markdown, no prose, no line breaks inside JSON.
+
+            EXAMPLES:
+
+            Step 1 (need information):
+            {"thought": "I should check what build templates are available before choosing one",
+             "action": "mcp",
+             "parameters": {"tool": "mempalace:mempalace_list_drawers", "args": {"wing": "structure_template"}},
+             "is_final": false}
+
+            Step 2 (after receiving template list, build):
+            {"thought": "house is available, will build it",
+             "action": "build",
+             "parameters": {"structure": "house"},
+             "is_final": false}
+
+            Final step:
+            {"thought": "House built successfully at the target position",
+             "is_final": true,
+             "final_answer": "Built a house at [100, 64, -200]"}
+
+            AVAILABLE MCP TOOLS:
+            %s
+            """.formatted(maxSteps, getAvailableTemplates(), getMaterialRule(), getMcpToolsPrompt());
+    }
+
+    public static String buildReActUserPrompt(SteveEntity steve, String command, String scratchpad) {
+        return """
+            === YOUR SITUATION ===
+            Position: %s
+            Nearby Players: %s
+            Nearby Entities: %s
+            Nearby Blocks: %s
+            Inventory: %s
+            Biome: %s
+            Warehouse: %s
+
+            === USER COMMAND ===
+            "%s"
+
+            === SCRATCHPAD (your previous thoughts, actions, and observations) ===
+            %s
+
+            === YOUR NEXT STEP (JSON only) ===
+            """.formatted(
+                formatPosition(steve.blockPosition()),
+                new WorldKnowledge(steve).getNearbyPlayerNames(),
+                new WorldKnowledge(steve).getNearbyEntitiesSummary(),
+                new WorldKnowledge(steve).getNearbyBlocksSummary(),
+                getInventoryStatus(steve),
+                new WorldKnowledge(steve).getBiomeName(),
+                getWarehouseStatus(steve),
+                command,
+                scratchpad.isEmpty() ? "(no steps taken yet)" : scratchpad
+            );
+    }
 }
 

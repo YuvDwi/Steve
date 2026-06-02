@@ -13,7 +13,88 @@ import java.util.List;
 import java.util.Map;
 
 public class ResponseParser {
-    
+
+    /**
+     * Parse a single ReAct step response. Format:
+     * <pre>
+     * {"thought": "...", "action": "build", "parameters": {...}, "is_final": false}
+     * </pre>
+     * Or final answer:
+     * <pre>
+     * {"thought": "...", "is_final": true, "final_answer": "..."}
+     * </pre>
+     *
+     * <p>If <code>is_final=true</code> and <code>final_answer</code> present, the
+     * returned <code>ParsedResponse</code> has empty <code>tasks</code> and
+     * <code>isFinal=true</code>. If a single action is present, <code>tasks</code>
+     * contains exactly one element. Returns <code>null</code> if the input cannot
+     * be parsed as JSON.</p>
+     */
+    public static ParsedResponse parseReActStep(String response) {
+        if (response == null || response.isEmpty()) {
+            return null;
+        }
+        try {
+            String jsonString = extractJSON(response);
+            JsonObject json = JsonParser.parseString(jsonString).getAsJsonObject();
+
+            String thought = json.has("thought") ? json.get("thought").getAsString() : "";
+            boolean isFinal = json.has("is_final") && json.get("is_final").getAsBoolean();
+            String finalAnswer = json.has("final_answer") ? json.get("final_answer").getAsString() : null;
+
+            if (isFinal) {
+                String answer = finalAnswer != null ? finalAnswer : thought;
+                SteveMod.LOGGER.info("[ReAct] Parsed final answer: {}", answer);
+                return new ParsedResponse(thought, thought, java.util.Collections.emptyList(), true, answer);
+            }
+
+            if (!json.has("action") || json.get("action").isJsonNull()) {
+                SteveMod.LOGGER.warn("[ReAct] Response missing 'action' field: {}", response);
+                return null;
+            }
+
+            String action = json.get("action").getAsString();
+            Map<String, Object> parameters = new HashMap<>();
+            if (json.has("parameters") && json.get("parameters").isJsonObject()) {
+                JsonObject paramsObj = json.getAsJsonObject("parameters");
+                for (String key : paramsObj.keySet()) {
+                    parameters.put(key, extractValue(paramsObj.get(key)));
+                }
+            }
+
+            Task task = new Task(action, parameters);
+            SteveMod.LOGGER.info("[ReAct] Parsed step: thought='{}' action={} parameters={}",
+                thought, action, parameters);
+            return new ParsedResponse(thought, thought, List.of(task), false, null);
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("[ReAct] Failed to parse step: {}", response, e);
+            return null;
+        }
+    }
+
+    private static Object extractValue(JsonElement value) {
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (value.isJsonPrimitive()) {
+            if (value.getAsJsonPrimitive().isNumber()) {
+                return value.getAsNumber();
+            } else if (value.getAsJsonPrimitive().isBoolean()) {
+                return value.getAsBoolean();
+            } else {
+                return value.getAsString();
+            }
+        }
+        if (value.isJsonArray()) {
+            List<Object> list = new ArrayList<>();
+            for (JsonElement element : value.getAsJsonArray()) {
+                list.add(extractValue(element));
+            }
+            return list;
+        }
+        return value.toString();
+    }
+
     public static ParsedResponse parseAIResponse(String response) {
         if (response == null || response.isEmpty()) {
             return null;
@@ -43,9 +124,10 @@ public class ResponseParser {
             }
             
             if (!reasoning.isEmpty()) {            }
-            
+
+            SteveMod.LOGGER.info("[Parser] Plan: {} ({} tasks)", plan, tasks.size());
             return new ParsedResponse(reasoning, plan, tasks);
-            
+
         } catch (Exception e) {
             SteveMod.LOGGER.error("Failed to parse AI response: {}", response, e);
             return null;
@@ -83,40 +165,17 @@ public class ResponseParser {
         if (!taskObj.has("action")) {
             return null;
         }
-        
+
         String action = taskObj.get("action").getAsString();
         Map<String, Object> parameters = new HashMap<>();
-        
+
         if (taskObj.has("parameters") && taskObj.get("parameters").isJsonObject()) {
             JsonObject paramsObj = taskObj.getAsJsonObject("parameters");
-            
             for (String key : paramsObj.keySet()) {
-                JsonElement value = paramsObj.get(key);
-                
-                if (value.isJsonPrimitive()) {
-                    if (value.getAsJsonPrimitive().isNumber()) {
-                        parameters.put(key, value.getAsNumber());
-                    } else if (value.getAsJsonPrimitive().isBoolean()) {
-                        parameters.put(key, value.getAsBoolean());
-                    } else {
-                        parameters.put(key, value.getAsString());
-                    }
-                } else if (value.isJsonArray()) {
-                    List<Object> list = new ArrayList<>();
-                    for (JsonElement element : value.getAsJsonArray()) {
-                        if (element.isJsonPrimitive()) {
-                            if (element.getAsJsonPrimitive().isNumber()) {
-                                list.add(element.getAsNumber());
-                            } else {
-                                list.add(element.getAsString());
-                            }
-                        }
-                    }
-                    parameters.put(key, list);
-                }
+                parameters.put(key, extractValue(paramsObj.get(key)));
             }
         }
-        
+
         return new Task(action, parameters);
     }
 
@@ -124,11 +183,19 @@ public class ResponseParser {
         private final String reasoning;
         private final String plan;
         private final List<Task> tasks;
+        private final boolean isFinal;
+        private final String finalAnswer;
 
         public ParsedResponse(String reasoning, String plan, List<Task> tasks) {
+            this(reasoning, plan, tasks, false, null);
+        }
+
+        public ParsedResponse(String reasoning, String plan, List<Task> tasks, boolean isFinal, String finalAnswer) {
             this.reasoning = reasoning;
             this.plan = plan;
             this.tasks = tasks;
+            this.isFinal = isFinal;
+            this.finalAnswer = finalAnswer;
         }
 
         public String getReasoning() {
@@ -141,6 +208,14 @@ public class ResponseParser {
 
         public List<Task> getTasks() {
             return tasks;
+        }
+
+        public boolean isFinal() {
+            return isFinal;
+        }
+
+        public String getFinalAnswer() {
+            return finalAnswer;
         }
     }
 }

@@ -11,12 +11,13 @@ import com.steve.ai.llm.ResponseParser;
 import com.steve.ai.llm.TaskPlanner;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
+import com.steve.ai.llm.react.ReActAgent;
 import com.steve.ai.plugin.ActionRegistry;
 import com.steve.ai.plugin.PluginManager;
 
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Executes actions for a Steve entity using the plugin-based action system.
@@ -34,17 +35,11 @@ import java.util.concurrent.CompletableFuture;
 public class ActionExecutor {
     private final SteveEntity steve;
     private TaskPlanner taskPlanner;  // Lazy-initialized to avoid loading dependencies on entity creation
-    private final Queue<Task> taskQueue;
 
     private BaseAction currentAction;
     private String currentGoal;
     private int ticksSinceLastAction;
     private BaseAction idleFollowAction;  // Follow player when idle
-
-    // NEW: Async planning support (non-blocking LLM calls)
-    private CompletableFuture<ResponseParser.ParsedResponse> planningFuture;
-    private boolean isPlanning = false;
-    private String pendingCommand;  // Store command while planning
 
     // NEW: Plugin architecture components
     private final ActionContext actionContext;
@@ -52,14 +47,16 @@ public class ActionExecutor {
     private final AgentStateMachine stateMachine;
     private final EventBus eventBus;
 
+    // ReAct mode state
+    private ReActAgent reactAgent;
+    private final Queue<String> pendingCommands = new LinkedList<>();
+    private Map<String, Object> reactBaseParams;
+
     public ActionExecutor(SteveEntity steve) {
         this.steve = steve;
         this.taskPlanner = null;  // Will be initialized when first needed
-        this.taskQueue = new LinkedList<>();
         this.ticksSinceLastAction = 0;
         this.idleFollowAction = null;
-        this.planningFuture = null;
-        this.pendingCommand = null;
 
         // Initialize plugin architecture components
         this.eventBus = new SimpleEventBus();
@@ -110,101 +107,40 @@ public class ActionExecutor {
      * @param command The natural language command from the user
      */
     public void processNaturalLanguageCommand(String command) {
-        SteveMod.LOGGER.info("Steve '{}' processing command (async): {}", steve.getSteveName(), command);
+        SteveMod.LOGGER.info("Steve '{}' received command: {}", steve.getSteveName(), command);
 
-        // If already planning, ignore new commands
-        if (isPlanning) {
-            SteveMod.LOGGER.warn("Steve '{}' is already planning, ignoring command: {}", steve.getSteveName(), command);
-            sendToGUI(steve.getSteveName(), "Hold on, I'm still thinking about the previous command...");
+        pendingCommands.add(command);
+        SteveMod.LOGGER.info("Steve '{}' queued command (queue size: {}): {}",
+            steve.getSteveName(), pendingCommands.size(), command);
+
+        if (reactAgent == null && currentAction == null) {
+            sendToGUI(steve.getSteveName(), "Thinking...");
+            drainNextCommand();
+        } else {
+            sendToGUI(steve.getSteveName(),
+                "Got it, will do after current task (queue: " + pendingCommands.size() + ")");
+        }
+    }
+
+    private void drainNextCommand() {
+        String next = pendingCommands.poll();
+        if (next == null) {
             return;
         }
+        currentGoal = next;
+        steve.getMemory().setCurrentGoal(currentGoal);
 
-        // Cancel any current actions
-        if (currentAction != null) {
-            currentAction.cancel();
-            currentAction = null;
-        }
+        reactBaseParams = getTaskPlanner().buildReActParams();
+        String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
+        reactAgent = new ReActAgent(steve, next,
+            SteveConfig.REACT_MAX_STEPS.get(),
+            SteveConfig.REACT_OBS_TRUNCATE.get(),
+            SteveConfig.REACT_FAIL_TOLERANCE.get());
 
-        if (idleFollowAction != null) {
-            idleFollowAction.cancel();
-            idleFollowAction = null;
-        }
-
-        try {
-            // Store command and start async planning
-            this.pendingCommand = command;
-            this.isPlanning = true;
-
-            // Send immediate feedback to user
-            sendToGUI(steve.getSteveName(), "Thinking...");
-
-            // Start async LLM call - returns immediately!
-            planningFuture = getTaskPlanner().planTasksAsync(steve, command);
-
-            SteveMod.LOGGER.info("Steve '{}' started async planning for: {}", steve.getSteveName(), command);
-
-        } catch (NoClassDefFoundError e) {
-            SteveMod.LOGGER.error("Failed to initialize AI components", e);
-            sendToGUI(steve.getSteveName(), "Sorry, I'm having trouble with my AI systems!");
-            isPlanning = false;
-            planningFuture = null;
-        } catch (Exception e) {
-            SteveMod.LOGGER.error("Error starting async planning", e);
-            sendToGUI(steve.getSteveName(), "Oops, something went wrong!");
-            isPlanning = false;
-            planningFuture = null;
-        }
+        SteveMod.LOGGER.info("Steve '{}' starting ReAct agent for: {}", steve.getSteveName(), next);
+        reactAgent.startAsync(getTaskPlanner().getAsyncClient(provider), reactBaseParams);
     }
 
-    /**
-     * Legacy synchronous command processing (blocking).
-     *
-     * <p><b>Warning:</b> This method blocks the game thread for 30-60 seconds during LLM calls.
-     * Use {@link #processNaturalLanguageCommand(String)} instead for non-blocking execution.</p>
-     *
-     * @param command The natural language command
-     * @deprecated Use {@link #processNaturalLanguageCommand(String)} instead
-     */
-    @Deprecated
-    public void processNaturalLanguageCommandSync(String command) {
-        SteveMod.LOGGER.info("Steve '{}' processing command (SYNC - blocking!): {}", steve.getSteveName(), command);
-
-        if (currentAction != null) {
-            currentAction.cancel();
-            currentAction = null;
-        }
-
-        if (idleFollowAction != null) {
-            idleFollowAction.cancel();
-            idleFollowAction = null;
-        }
-
-        try {
-            // BLOCKING CALL - freezes game for 30-60 seconds!
-            ResponseParser.ParsedResponse response = getTaskPlanner().planTasks(steve, command);
-
-            if (response == null) {
-                sendToGUI(steve.getSteveName(), "I couldn't understand that command.");
-                return;
-            }
-
-            currentGoal = response.getPlan();
-            steve.getMemory().setCurrentGoal(currentGoal);
-
-            taskQueue.clear();
-            taskQueue.addAll(response.getTasks());
-
-            if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                sendToGUI(steve.getSteveName(), "Okay! " + currentGoal);
-            }
-        } catch (NoClassDefFoundError e) {
-            SteveMod.LOGGER.error("Failed to initialize AI components", e);
-            sendToGUI(steve.getSteveName(), "Sorry, I'm having trouble with my AI systems!");
-        }
-
-        SteveMod.LOGGER.info("Steve '{}' queued {} tasks", steve.getSteveName(), taskQueue.size());
-    }
-    
     /**
      * Send a message to the GUI pane (client-side only, no chat spam)
      */
@@ -217,61 +153,33 @@ public class ActionExecutor {
     public void tick() {
         ticksSinceLastAction++;
 
-        // Check if async planning is complete (non-blocking check!)
-        if (isPlanning && planningFuture != null && planningFuture.isDone()) {
-            try {
-                ResponseParser.ParsedResponse response = planningFuture.get();
-
-                if (response != null) {
-                    currentGoal = response.getPlan();
-                    steve.getMemory().setCurrentGoal(currentGoal);
-
-                    taskQueue.clear();
-                    taskQueue.addAll(response.getTasks());
-
-                    if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
-                        sendToGUI(steve.getSteveName(), "Okay! " + currentGoal);
-                    }
-
-                    SteveMod.LOGGER.info("Steve '{}' async planning complete: {} tasks queued",
-                        steve.getSteveName(), taskQueue.size());
-                } else {
-                    sendToGUI(steve.getSteveName(), "I couldn't understand that command.");
-                    SteveMod.LOGGER.warn("Steve '{}' async planning returned null response", steve.getSteveName());
-                }
-
-            } catch (java.util.concurrent.CancellationException e) {
-                SteveMod.LOGGER.info("Steve '{}' planning was cancelled", steve.getSteveName());
-                sendToGUI(steve.getSteveName(), "Planning cancelled.");
-            } catch (Exception e) {
-                SteveMod.LOGGER.error("Steve '{}' failed to get planning result", steve.getSteveName(), e);
-                sendToGUI(steve.getSteveName(), "Oops, something went wrong while planning!");
-            } finally {
-                isPlanning = false;
-                planningFuture = null;
-                pendingCommand = null;
-            }
-        }
+        // (Legacy Plan-and-Execute removed; ReAct handles LLM-driven step dispatch below.)
 
         if (currentAction != null) {
             if (currentAction.isComplete()) {
                 ActionResult result = currentAction.getResult();
-                SteveMod.LOGGER.info("Steve '{}' - Action completed: {} (Success: {})", 
+                SteveMod.LOGGER.info("Steve '{}' - Action completed: {} (Success: {})",
                     steve.getSteveName(), result.getMessage(), result.isSuccess());
-                
+
                 steve.getMemory().addAction(currentAction.getDescription());
-                
+
                 if (!result.isSuccess() && result.requiresReplanning()) {
-                    // Action failed, need to replan
                     if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
                         sendToGUI(steve.getSteveName(), "Problem: " + result.getMessage());
                     }
                 }
-                
+
                 currentAction = null;
+
+                // Feed the observation back to the ReAct agent (if any)
+                if (reactAgent != null) {
+                    String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
+                    reactAgent.feedObservation(result,
+                        getTaskPlanner().getAsyncClient(provider), reactBaseParams);
+                }
             } else {
                 if (ticksSinceLastAction % 100 == 0) {
-                    SteveMod.LOGGER.info("Steve '{}' - Ticking action: {}", 
+                    SteveMod.LOGGER.info("Steve '{}' - Ticking action: {}",
                         steve.getSteveName(), currentAction.getDescription());
                 }
                 currentAction.tick();
@@ -279,26 +187,66 @@ public class ActionExecutor {
             }
         }
 
-        if (ticksSinceLastAction >= SteveConfig.ACTION_TICK_DELAY.get()) {
-            if (!taskQueue.isEmpty()) {
-                Task nextTask = taskQueue.poll();
-                executeTask(nextTask);
-                ticksSinceLastAction = 0;
+        // ReAct mode state machine
+        if (reactAgent != null) {
+            if (reactAgent.failed()) {
+                String msg = reactAgent.getFailureMessage();
+                SteveMod.LOGGER.error("Steve '{}' ReAct agent failed: {}",
+                    steve.getSteveName(), msg);
+                sendToGUI(steve.getSteveName(), "AI error: " + msg);
+                reactAgent = null;
+                if (!pendingCommands.isEmpty()) {
+                    drainNextCommand();
+                    return;
+                }
+                currentGoal = null;
                 return;
             }
+
+            if (reactAgent.isFinished()) {
+                String answer = reactAgent.getFinalAnswer();
+                if (answer != null && !answer.isEmpty()) {
+                    SteveMod.LOGGER.info("Steve '{}' ReAct finished: {}", steve.getSteveName(), answer);
+                    sendToGUI(steve.getSteveName(), answer);
+                }
+                reactAgent = null;
+                if (!pendingCommands.isEmpty()) {
+                    drainNextCommand();
+                    return;
+                }
+                currentGoal = null; // allow idle follow when queue is empty
+            } else if (reactAgent.isReadyNextStep()) {
+                ResponseParser.ParsedResponse step = reactAgent.consumeNextStep();
+                if (step != null && !step.getTasks().isEmpty()) {
+                    Task task = step.getTasks().get(0);
+                    if (!getTaskPlanner().validateTask(task)) {
+                        SteveMod.LOGGER.warn("Steve '{}' invalid action from ReAct: {}",
+                            steve.getSteveName(), task.getAction());
+                        String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
+                        reactAgent.feedObservation(
+                            "Invalid action: '" + task.getAction() + "'. Allowed: pathfind, mine, place, craft, attack, follow, gather, build, mcp",
+                            getTaskPlanner().getAsyncClient(provider), reactBaseParams);
+                    } else {
+                        executeTask(task);
+                        ticksSinceLastAction = 0;
+                        return;
+                    }
+                }
+            }
+            return; // ReAct is in control
         }
-        
-        // When completely idle (no tasks, no goal), follow nearest player
-        if (taskQueue.isEmpty() && currentAction == null && currentGoal == null) {
+
+        // ReAct path returns above; below runs only when no ReAct is active.
+        // (No legacy Plan-and-Execute task queue — ReAct drives every step.)
+        if (currentGoal == null && currentAction == null) {
+            // When completely idle (no ReAct, no goal), follow nearest player
             if (idleFollowAction == null) {
                 idleFollowAction = new IdleFollowAction(steve);
                 idleFollowAction.start();
             } else if (idleFollowAction.isComplete()) {
-                // Restart idle following if it stopped
                 idleFollowAction = new IdleFollowAction(steve);
                 idleFollowAction.start();
             } else {
-                // Continue idle following
                 idleFollowAction.tick();
             }
         } else if (idleFollowAction != null) {
@@ -391,15 +339,17 @@ public class ActionExecutor {
             idleFollowAction.cancel();
             idleFollowAction = null;
         }
-        taskQueue.clear();
         currentGoal = null;
+        reactAgent = null;
+        reactBaseParams = null;
+        pendingCommands.clear();
 
         // Reset state machine
         stateMachine.reset();
     }
 
     public boolean isExecuting() {
-        return currentAction != null || !taskQueue.isEmpty();
+        return currentAction != null || reactAgent != null;
     }
 
     public String getCurrentGoal() {
@@ -443,12 +393,10 @@ public class ActionExecutor {
     }
 
     /**
-     * Checks if the agent is currently planning (async LLM call in progress).
-     *
-     * @return true if planning
+     * Checks if the agent is currently busy with a ReAct agent or an action.
      */
-    public boolean isPlanning() {
-        return isPlanning;
+    public boolean isBusy() {
+        return reactAgent != null || currentAction != null;
     }
 }
 

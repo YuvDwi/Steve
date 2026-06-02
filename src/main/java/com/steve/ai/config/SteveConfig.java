@@ -18,6 +18,9 @@ public class SteveConfig {
     public static final ForgeConfigSpec.BooleanValue MCP_ENABLED;
     public static final ForgeConfigSpec.ConfigValue<String> MCP_SERVERS;
     public static final ForgeConfigSpec.IntValue MCP_TIMEOUT_MS;
+    public static final ForgeConfigSpec.IntValue REACT_MAX_STEPS;
+    public static final ForgeConfigSpec.IntValue REACT_OBS_TRUNCATE;
+    public static final ForgeConfigSpec.IntValue REACT_FAIL_TOLERANCE;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -91,6 +94,22 @@ public class SteveConfig {
         MCP_TIMEOUT_MS = builder
             .comment("MCP tool call timeout in milliseconds")
             .defineInRange("timeoutMs", 30000, 1000, 120000);
+
+        builder.pop();
+
+        builder.comment("ReAct (Reason + Act) Mode Configuration").push("react");
+
+        REACT_MAX_STEPS = builder
+            .comment("Maximum ReAct steps before force-finishing (1-50)")
+            .defineInRange("maxSteps", 12, 1, 50);
+
+        REACT_OBS_TRUNCATE = builder
+            .comment("Per-observation character truncation (100-4000)")
+            .defineInRange("observationTruncateChars", 800, 100, 4000);
+
+        REACT_FAIL_TOLERANCE = builder
+            .comment("Consecutive LLM parse failures before giving up (1-10)")
+            .defineInRange("maxConsecutiveFailures", 3, 1, 10);
 
         builder.pop();
 

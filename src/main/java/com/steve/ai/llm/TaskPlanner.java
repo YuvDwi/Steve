@@ -9,6 +9,7 @@ import com.steve.ai.llm.resilience.LLMFallbackHandler;
 import com.steve.ai.llm.resilience.ResilientLLMClient;
 import com.steve.ai.memory.WorldKnowledge;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -187,7 +188,7 @@ public class TaskPlanner {
      * @param provider Provider name ("openai", "groq", "gemini")
      * @return Resilient async client
      */
-    private AsyncLLMClient getAsyncClient(String provider) {
+    public AsyncLLMClient getAsyncClient(String provider) {
         return switch (provider) {
             case "openai" -> asyncOpenAIClient;
             case "gemini" -> asyncGeminiClient;
@@ -242,6 +243,19 @@ public class TaskPlanner {
         return tasks.stream()
             .filter(this::validateTask)
             .toList();
+    }
+
+    /**
+     * Build a fresh parameter map for a ReAct step. Each call must return a new
+     * map because the prompt is rebuilt every step (scratchpad grows).
+     */
+    public Map<String, Object> buildReActParams() {
+        return new HashMap<>(Map.of(
+            "systemPrompt", PromptBuilder.buildReActSystemPrompt(SteveConfig.REACT_MAX_STEPS.get()),
+            "model", SteveConfig.OPENAI_MODEL.get(),
+            "maxTokens", SteveConfig.MAX_TOKENS.get(),
+            "temperature", SteveConfig.TEMPERATURE.get()
+        ));
     }
 }
 

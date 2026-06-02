@@ -39,3 +39,15 @@
 
     # MCP tool call timeout in milliseconds (1000 ~ 120000)
     timeoutMs = 30000
+
+#ReAct (Reason + Act) Mode Configuration
+[react]
+	#Maximum ReAct steps before force-finishing (1-50)
+	#Range: 1 ~ 50
+	maxSteps = 12
+	#Per-observation character truncation (100-4000)
+	#Range: 100 ~ 4000
+	observationTruncateChars = 800
+	#Consecutive LLM parse failures before giving up (1-10)
+	#Range: 1 ~ 10
+	maxConsecutiveFailures = 3

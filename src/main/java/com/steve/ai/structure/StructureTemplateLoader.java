@@ -172,7 +172,9 @@ public class StructureTemplateLoader {
                 for (File file : files) {
                     String name = file.getName().replace(".nbt", "");
                     structures.add(name);
-                    registerStructureToMempalace(file, name);
+                    String[] parts = name.split("_", 2);
+                    String type = parts.length > 1 ? parts[0] : "default";
+                    registerStructureToMempalace(file, name, type);
                 }
             }
         }
@@ -184,7 +186,7 @@ public class StructureTemplateLoader {
     /**
      * Register structure template to mempalace
      */
-    private static void registerStructureToMempalace(File file, String name) {
+    private static void registerStructureToMempalace(File file, String name, String type) {
         try {
             LoadedTemplate template = loadFromFile(file, name);
             if (template == null) return;
@@ -192,11 +194,11 @@ public class StructureTemplateLoader {
             MCPClientWrapper client = new MCPClientWrapper("mempalace", "http://localhost:6060");
             client.initialize();
 
-            String content = String.format("Structure '%s' %dx%dx%d with %d blocks",
-                template.name, template.width, template.height, template.depth, template.blocks.size());
+            String content = String.format("Type: %s | Structure '%s' %dx%dx%d with %d blocks",
+                type, template.name, template.width, template.height, template.depth, template.blocks.size());
 
             client.callTool("mempalace_add_drawer", Map.of(
-                "wing", "structure_templates",
+                "wing", "structure_" + type,
                 "room", template.name,
                 "content", content,
                 "added_by", "steve-ai"
@@ -204,12 +206,12 @@ public class StructureTemplateLoader {
 
             // Verify by querying back
             String queryResult = client.callTool("mempalace_list_drawers", Map.of(
-                "wing", "structure_templates"
+                "wing", "structure_" + type
             ));
             SteveMod.LOGGER.info("Query mempalace after register: {}", queryResult);
 
             client.close();
-            SteveMod.LOGGER.info("Registered structure template '{}' to mempalace", template.name);
+            SteveMod.LOGGER.info("Registered structure template '{}' (type: {}) to mempalace", template.name, type);
         } catch (Exception e) {
             SteveMod.LOGGER.warn("Failed to register structure to mempalace: {}", e.getMessage());
         }
