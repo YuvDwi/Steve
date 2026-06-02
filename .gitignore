@@ -25,9 +25,6 @@ run/config/steve-common.toml
 *.avi
 *.webm
 
-# Structure files (if regenerable)
-*.nbt
-
 # macOS
 .DS_Store
 .AppleDouble
