@@ -8,16 +8,15 @@ PromptBuilder 是 Steve AI 的提示词工程核心，负责构建发送给 LLM 
 
 ```
 PromptBuilder
-├── buildSystemPrompt()
-│   ├── 游戏模式规则 (创造/生存)
-│   ├── 动作定义 (attack, build, mine, follow, pathfind)
-│   ├── 结构选项说明
-│   └── 示例输入输出
-└── buildUserPrompt()
-    ├── 环境上下文 (位置、实体、方块、生物群系)
-    ├── 背包状态
-    └── 玩家命令
+├── buildSystemPrompt()                 # Plan-and-Execute 旧系统提示词 (保留)
+├── buildUserPrompt(steve, cmd, world)  # Plan-and-Execute 旧用户提示词
+├── buildReActSystemPrompt(maxSteps)    # ReAct 系统提示词（输出 Thought/Action/FinalAnswer）
+└── buildReActUserPrompt(steve, cmd, scratchpad)  # ReAct 用户提示词（带历史）
 ```
+
+**ReAct 模式专用方法**：
+- `buildReActSystemPrompt(maxSteps)` — 注入 ReAct 输出格式（单步 action + is_final）、停止条件、可用动作清单（含 mcp）、MCP 工具列表
+- `buildReActUserPrompt(steve, command, scratchpad)` — 包含环境状态、玩家命令、scratchpad（历史 thought/action/observation），每步重建
 
 ## 核心设计决策
 
@@ -62,18 +61,33 @@ String materialRule = creative
 
 ### 3. 严格的 JSON 输出格式
 
-强制 LLM 输出有效 JSON：
-
+**Plan-and-Execute（旧）** 一次返回多个任务：
 ```json
 {
   "reasoning": "简短想法",
   "plan": "动作描述",
   "tasks": [
-    {
-      "action": "类型",
-      "parameters": { ... }
-    }
+    {"action": "类型", "parameters": { ... }}
   ]
+}
+```
+
+**ReAct（当前）** 每步一个 action 或最终答案：
+```json
+{
+  "thought": "我需要先查询可用模板",
+  "action": "mcp",
+  "parameters": {"tool": "mempalace:mempalace_list_drawers", "args": {"wing": "structure_template"}},
+  "is_final": false
+}
+```
+
+完成时：
+```json
+{
+  "thought": "城堡建好了",
+  "is_final": true,
+  "final_answer": "Built a castle at [100, 64, -200]"
 }
 ```
 
@@ -81,6 +95,7 @@ String materialRule = creative
 - JSON 易于程序解析
 - 避免自然语言歧义
 - 结构化便于错误处理
+- ReAct 让 LLM 看到 observation 后再决策，支持 MCP 工具的迭代查询
 
 ### 4. 丰富的环境上下文
 
@@ -263,21 +278,45 @@ private static String formatPosition(BlockPos pos) {
 
 ## 与 LLM 集成
 
-### 调用流程
+### 调用流程（ReAct 模式）
 
 ```java
-// 1. 构建系统提示词（可缓存）
-String systemPrompt = PromptBuilder.buildSystemPrompt();
+// 1. 构造 ReAct 主循环
+ReActAgent agent = new ReActAgent(steve, command,
+    SteveConfig.REACT_MAX_STEPS.get(),
+    SteveConfig.REACT_OBS_TRUNCATE.get(),
+    SteveConfig.REACT_FAIL_TOLERANCE.get());
 
-// 2. 构建用户提示词（每次变化）
-String userPrompt = PromptBuilder.buildUserPrompt(steve, command, worldKnowledge);
+// 2. 系统提示词每步重建（保证模板/MCP 工具列表最新）
+String systemPrompt = PromptBuilder.buildReActSystemPrompt(maxSteps);
 
-// 3. 发送到 LLM
-String response = llmClient.sendRequest(systemPrompt, userPrompt);
+// 3. 用户提示词携带 scratchpad（每轮追加 thought/action/observation）
+String userPrompt = PromptBuilder.buildReActUserPrompt(steve, command, scratchpad);
 
-// 4. 解析响应
-Task[] tasks = ResponseParser.parse(response);
+// 4. 异步发送
+AsyncLLMClient client = taskPlanner.getAsyncClient(provider);
+client.sendAsync(userPrompt, Map.of("systemPrompt", systemPrompt, "model", ..., "maxTokens", ..., "temperature", ...))
+      .thenAccept(response -> {
+          ParsedResponse step = ResponseParser.parseReActStep(response.getContent());
+          // step.isFinal() / step.getTasks().get(0)
+      });
 ```
+
+### MCP 工具列表注入
+
+`getMcpToolsPrompt()` 在系统提示词末尾追加 `AVAILABLE MCP TOOLS` 段：
+
+```
+AVAILABLE MCP TOOLS:
+- mempalace:mempalace_list_drawers: List drawers with pagination
+  args: {"wing": "structure_template"}
+- mempalace:mempalace_get_drawer: Fetch a single drawer by ID
+  args: {"wing": "structure_template", "room": "house"}
+- mempalace:mempalace_add_drawer: Add a drawer
+  args: {"wing": "structure_template", "room": "house", "content": "...", "added_by": "steve-ai"}
+```
+
+LLM 通过 `action="mcp"`, `parameters.tool="mempalace:mempalace_list_drawers"` 调用。`MCPToolConverter.toPromptSection` 把 `MCPToolRegistry.getAllTools()` 转换为这段文本。
 
 ### 缓存策略
 
@@ -294,18 +333,16 @@ Task[] tasks = ResponseParser.parse(response);
 ## 已知限制
 
 1. **语言限制**：提示词全英文，中文命令可能理解不准确
-2. **上下文长度**：背包满时提示词可能过长
-3. **动态规则**：无法根据游戏进程调整规则
-4. **多动作支持**：一次只能执行一个主要动作
-5. **空间感知**：无法描述复杂的空间关系
+2. **上下文长度**：ReAct scratchpad 超过 12k 字符会裁掉最早 step，可能丢失远期上下文
+3. **解析脆弱性**：LLM 输出非 JSON 或 action 不在白名单时会喂回错误 observation 重新提示（最多 `maxConsecutiveFailures` 次）
+4. **空间感知**：无法描述复杂的空间关系
 
 ## 扩展建议
 
 1. **多语言支持**：添加中文系统提示词选项
 2. **上下文压缩**：背包物品智能摘要
-3. **动态示例**：根据玩家历史命令调整示例
-4. **复杂任务**：支持多步骤任务分解
-5. **记忆集成**：将历史动作纳入提示词
+3. **MCP 工具发现**：动态从 `MCPToolRegistry` 拉取最新工具列表
+4. **scratchpad 持久化**：跨 ReAct 会话保留观察结果
 
 ## 配置选项
 

@@ -37,3 +37,26 @@
 - 🟢 绿色: 用户消息
 - 🔵 蓝色: Steve 响应
 - 🟠 橙色: 系统消息
+
+## ReAct 模式（Reason + Act）
+
+Steve 不是"想完再干"，而是"想一步干一步"：
+
+1. LLM 看到命令 → 决定一个 Action（带 Thought 说明）
+2. Steve 执行 Action → 把结果（`ActionResult`）作为 Observation 反馈给 LLM
+3. LLM 根据 Observation 决定下一步
+4. 直到 LLM 输出 `is_final: true` 或达到 `maxSteps`
+
+这样 LLM 可以先调 MCP 工具查信息（如 `mempalace_list_drawers` 查可用模板），看到结果后再决定下一步该建造什么。命令排队：玩家在 ReAct 进行中发新指令会入队，当前 ReAct 完成后自动处理。
+
+详见 [docs/01-architecture.md](01-architecture.md) §5、§6 和 `llm/react/ReActAgent.java`。
+
+## Mempalace / MCP 集成
+
+- **mempalace**（默认 `http://localhost:6060`）是外部 MCP 服务，存结构模板元信息和已建建筑位置
+- **启动时** `StructureTemplateLoader` 扫描 `config/steve/structures/*.nbt`，注册到 mempalace
+- **运行时** LLM 通过 `action="mcp"` 调 mempalace 工具查模板
+- **建造完成** 写位置到 `wing=built_structures`
+- **长期记忆** `SteveMemory.queryLongTermMemory()` 也走 mempalace
+
+详见 `docs/hackathon/03-mempalace-integration.md` 和 [docs/06-llm.md](06-llm.md) §5。

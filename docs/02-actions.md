@@ -24,14 +24,22 @@
 | `GatherResourceAction` | 资源采集 |
 | `PlaceWarehouseAction` | 放置仓库箱子 |
 | `WarehouseRefillHandler` | 建造缺材料时自动从仓库补给 |
+| `MCPAction` | 调用 MCP 工具（参数 `tool="serverName:toolName"`, `args={...}`） |
 
-## 执行流程
+## 执行流程（ReAct 主循环）
 
 1. 用户发送自然语言指令（如 `/steve tell miner1 开采 20 铁矿石`）
-2. `TaskPlanner` 调用 LLM 解析指令，生成动作序列
-3. 动作被加入 `ActionExecutor` 的队列
-4. 每个游戏 tick，`ActionExecutor` 处理队列中的动作
-5. 动作执行结果通过 GUI 显示给用户
+2. `ActionExecutor.processNaturalLanguageCommand` 把指令加入 `pendingCommands` 队列
+3. 若 `reactAgent == null && currentAction == null`，调 `drainNextCommand()` 取出队首
+4. 构造 `ReActAgent(steve, command, maxSteps, obsTruncate, maxConsecutiveFailures)`，调 `startAsync(client, params)` 发起首次 LLM 调用（非阻塞）
+5. 每个游戏 tick：
+   - 若 `currentAction.isComplete()`，取 `ActionResult` 调 `reactAgent.feedObservation(result, client, params)` —— ReActAgent 自动触发下一轮 LLM 调用
+   - 若 `reactAgent.isReadyNextStep()`，调 `consumeNextStep()` 拿到 `Task`，`executeTask(task)` 创建并 `start()` `BaseAction`
+   - 若 `reactAgent.isFinished()`，把 `finalAnswer` 发到 GUI，自动 `drainNextCommand` 处理下一条
+   - 若 `reactAgent.failed()`，硬切（不回退到旧 Plan-and-Execute），发错误到 GUI
+6. ReAct 循环直到 LLM 输出 `is_final: true` / `stepCount >= maxSteps` / 连续解析失败 ≥ `maxConsecutiveFailures`
+
+**重要**：玩家在 ReAct 进行中发新指令时，新指令**入队不打断**，当前 ReAct 完成后顺序处理（`stopCurrentAction` 会清空队列）。
 
 ## BuildStructureAction 实现
 
@@ -64,15 +72,12 @@ BuildStructureAction.onTick() 每 tick:
 |------|------|
 | **位置确定** | 优先在玩家视线方向 12 格处找地面；无玩家则在 Steve 附近 2 格处 |
 | **地形检测** | `findGroundLevel()` 向下/上扫描找实体地面；`isAreaSuitable()` 检查地形平整度（高度差≤2）和上方空间 |
-| **模板加载** | `tryLoadFromTemplate()` → `StructureTemplateLoader.loadFromNBT()` — 目前无 `.nbt` 文件，始终返回 null |
-| **程序化生成** | `StructureGenerators.generate()` — 8 种内置建筑类型 |
+| **模板加载** | `tryLoadFromTemplate()` → `StructureTemplateLoader.loadFromNBT()` — 启动时已扫描 `config/steve/structures/*.nbt` 并注册到 mempalace，LLM 通过 `mempalace_list_drawers` 发现 |
+| **程序化生成** | `StructureGenerators.generate()` — 8 种内置建筑类型（无 .nbt 时的回退） |
 | **协作建造** | `CollaborativeBuildManager` 分象限分配方块，多 Steve 并行放置 |
 | **仓库补给** | 材料不足时 `WarehouseRefillHandler` 自动去最近仓库取材料，取完返回继续建造 |
+| **位置归档** | 建造完成后 ReAct 调 `mempalace_add_drawer(wing=built_structures)` 写入 mempalace |
 | **飞行** | 建造时 Steve 启用飞行 (`steve.setFlying(true)`)，完成后关闭 |
-
-### 注意
-
-当前**没有使用任何 NBT 模板**，完全依赖 `StructureGenerators` 的程序化生成。
 
 ## 插件架构
 
