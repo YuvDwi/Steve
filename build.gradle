@@ -23,6 +23,8 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+            property 'file.encoding', 'UTF-8'
+            property 'log4j2.encoding', 'UTF-8'
 
             mods {
                 steve {
@@ -35,6 +37,8 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+            property 'file.encoding', 'UTF-8'
+            property 'log4j2.encoding', 'UTF-8'
 
             mods {
                 steve {
@@ -46,6 +50,10 @@ minecraft {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
 
 repositories {
     maven { url = 'https://lss233.littleservice.cn/repositories/minecraft/' }
