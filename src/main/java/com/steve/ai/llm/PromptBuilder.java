@@ -27,7 +27,7 @@ public class PromptBuilder {
 
             ACTIONS:
             - attack: {"target": "hostile"} (for any mob/monster)
-            - build: {"structure": "house"} (NBT template, auto-sized)
+            - build: {"structure": "house"} (NBT template, auto-sized) — or {"structures": ["house","fence"]} for multi-template plans
             - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
@@ -196,7 +196,7 @@ public class PromptBuilder {
 
             ACTIONS (use these exact names):
             - attack: {"target": "hostile|mob_name"} (for any mob/monster/creature)
-            - build: {"structure": "<template_name>"} (NBT template, auto-sized)
+            - build: {"structure": "<template_name>"} (NBT template, auto-sized) — or {"structures": ["<name1>", "<name2>"]} for composite builds (max 4 by default)
             - mine: {"block": "<resource>", "quantity": <int>} (resources: iron, diamond, coal, gold, copper, redstone, emerald, etc)
             - follow: {"player": "<player_name>"}
             - pathfind: {"x": <int>, "y": <int>, "z": <int>}
@@ -228,6 +228,12 @@ public class PromptBuilder {
             {"thought": "house is available, will build it",
              "action": "build",
              "parameters": {"structure": "house"},
+             "is_final": false}
+
+            Step 2b (composite build — village with 3 templates):
+            {"thought": "village needs 房子_1 + 井 + 围栏, all available, will plan all three",
+             "action": "build",
+             "parameters": {"structures": ["房子_1", "井", "围栏"]},
              "is_final": false}
 
             Final step:

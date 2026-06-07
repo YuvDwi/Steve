@@ -128,22 +128,21 @@ prompt.append("Biome: ").append(worldKnowledge.getBiomeName()).append("\n");
 | 动作 | 参数格式 | 说明 |
 |------|----------|------|
 | attack | `{"target": "hostile"}` | 攻击敌对生物 |
-| build | `{"structure": "house", "blocks": [...], "dimensions": [...]}` | 建造结构 |
+| build | `{"structure": "house", "blocks": [...], "dimensions": [...]}` | 建造结构（ReAct 模式下被拦截到 `PlanBuildAction`） |
 | mine | `{"block": "iron", "quantity": 8}` | 采矿 |
 | follow | `{"player": "NAME"}` | 跟随玩家 |
 | pathfind | `{"x": 0, "y": 0, "z": 0}` | 导航到位置 |
+| gather | `{"resource": "iron", "quantity": 8}` | 资源采集 |
+| craft | `{"item": "iron_pickaxe", "quantity": 1}` | 物品合成 |
+| mcp | `{"tool": "serverName:toolName", "args": {...}}` | 调用 MCP 工具 |
 
 ### 结构类型
 
-| 类型 | 生成方式 | 默认尺寸 |
-|------|----------|----------|
-| house | NBT 模板 | 自动 |
-| oldhouse | NBT 模板 | 自动 |
-| powerplant | NBT 模板 | 自动 |
-| castle | 程序化 | 14x10x14 |
-| tower | 程序化 | 6x6x16 |
-| barn | 程序化 | 12x8x14 |
-| modern | 程序化 | 可变 |
+> **已废弃**：当前 ReAct / `PlanBuildAction` 只走 NBT 模板，`StructureGenerators` 类已删除。
+> 模板列表由 `config/steve/structures/*.nbt` 决定（见 [10-structures.md](10-structures.md)）。
+> 无匹配 NBT 时 `PlanBuildAction.runDesign` 会 `ActionResult.failure("None of the requested NBT templates could be loaded")`，不再有兜底生成。
+>
+> 下面表格保留作为历史参考。
 
 ### 示例输入输出
 
@@ -352,3 +351,4 @@ LLM 通过 `action="mcp"`, `parameters.tool="mempalace:mempalace_list_drawers"` 
 | `AI_PROVIDER` | String | "groq" | LLM 提供商 |
 | `MAX_TOKENS` | Integer | 8000 | 最大 token 数 |
 | `TEMPERATURE` | Double | 0.7 | 生成温度 |
+| `MAX_TEMPLATES_PER_PLAN` | Integer | 4 | `/steve plan` 一次最多拼 N 个 NBT 模板 (1-10) |

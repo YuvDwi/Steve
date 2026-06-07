@@ -44,8 +44,9 @@ model = "gemini-pro"
 actionTickDelay = 20      # 动作检查间隔 (tick)
 enableChatResponses = true
 maxActiveSteves = 10      # 最大活跃 Steve 数量
-buildTickDelay = 20       # 方块放置间隔 (tick)
+buildTickDelay = 20       # 方块放置间隔 (tick, PlanBuildAction CONSTRUCTION 阶段每方块 tick 数)
 creativeMode = true       # 创造模式: 材料无限, 跳过采矿
+maxTemplatesPerPlan = 4   # /steve plan 一次最多拼 N 个 NBT 模板 (1-10)
 ```
 
 ## MCP / Mempalace 配置

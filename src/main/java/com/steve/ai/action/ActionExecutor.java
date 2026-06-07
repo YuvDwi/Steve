@@ -6,6 +6,7 @@ import com.steve.ai.di.ServiceContainer;
 import com.steve.ai.di.SimpleServiceContainer;
 import com.steve.ai.event.EventBus;
 import com.steve.ai.event.SimpleEventBus;
+import com.steve.ai.event.plan.PlanChatEvent;
 import com.steve.ai.execution.*;
 import com.steve.ai.llm.ResponseParser;
 import com.steve.ai.llm.TaskPlanner;
@@ -145,9 +146,15 @@ public class ActionExecutor {
      * Send a message to the GUI pane (client-side only, no chat spam)
      */
     private void sendToGUI(String steveName, String message) {
-        if (steve.level().isClientSide) {
-            com.steve.ai.client.SteveGUI.addSteveMessage(steveName, message);
-        }
+        // The chat surface lives in the browser dashboard now. Forward the line
+        // through the plan event bus so the SSE channel picks it up.
+        String projectId = "";
+        try {
+            BuildProject p = getActiveBuildProject();
+            if (p != null) projectId = p.id;
+        } catch (Exception ignored) {}
+        SteveMod.getPlanEventBus().publish(new PlanChatEvent(projectId, steveName,
+            PlanChatEvent.Sender.STEVE, message));
     }
 
     public void tick() {
@@ -321,7 +328,10 @@ public class ActionExecutor {
             case "attack" -> new CombatAction(steve, task);
             case "follow" -> new FollowPlayerAction(steve, task);
             case "gather" -> new GatherResourceAction(steve, task);
-            case "build" -> new BuildStructureAction(steve, task);
+            // Intercept "build" -> PlanBuildAction (four-phase plan-then-build workflow).
+            // The plan action loads NBT, archives design to mempalace, and waits for
+            // player /steve approve before any blocks are placed.
+            case "build" -> new PlanBuildAction(steve, task, this);
             case "mcp" -> new MCPAction(steve, task);
             default -> {
                 SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
@@ -346,6 +356,72 @@ public class ActionExecutor {
 
         // Reset state machine
         stateMachine.reset();
+    }
+
+    /**
+     * Approve the current build's pending phase. No-op if not in a PlanBuildAction
+     * awaiting approval.
+     */
+    public void approveCurrentBuild() {
+        if (currentAction instanceof PlanBuildAction plan) {
+            plan.approve();
+        } else {
+            SteveMod.LOGGER.warn("approveCurrentBuild: no PlanBuildAction in progress for Steve '{}'",
+                steve.getSteveName());
+        }
+    }
+
+    /**
+     * Halt the current build (if any). No-op if not a PlanBuildAction.
+     */
+    public void haltCurrentBuild(String reason) {
+        if (currentAction instanceof PlanBuildAction plan) {
+            plan.halt(reason);
+        } else {
+            SteveMod.LOGGER.warn("haltCurrentBuild: no PlanBuildAction in progress for Steve '{}'",
+                steve.getSteveName());
+        }
+    }
+
+    /**
+     * Get the active build project, or null if no PlanBuildAction is in flight.
+     */
+    public com.steve.ai.action.BuildProject getActiveBuildProject() {
+        if (currentAction instanceof PlanBuildAction plan) {
+            return plan.getProject();
+        }
+        return null;
+    }
+
+    /**
+     * Plan a build via LLM. The LLM picks the template and the design phase
+     * produces a doc the player must /steve approve before any blocks are
+     * placed. Mirrors Claude Code's plan mode semantics.
+     *
+     * <p>The plan-mode constraint is embedded into the user-facing command
+     * string itself — ReActAgent.runStep embeds originalCommand raw into the
+     * === USER COMMAND === block of every step, so the LLM sees the rule on
+     * every turn without any system-prompt changes.</p>
+     *
+     * <p>Used by the /steve plan subcommand.</p>
+     */
+    public void startPlannedBuild(String description) {
+        SteveMod.LOGGER.info("Steve '{}' planning: {}", steve.getSteveName(), description);
+        String augmented = "[PLAN MODE] Player wants a plan, NOT immediate execution. "
+            + "You MUST respond by emitting action=build with the most fitting NBT template(s) "
+            + "from the available list. For composite builds (e.g. a village or courtyard), "
+            + "emit parameters: {\"structures\": [\"<name1>\", \"<name2>\", ...]} — at most "
+            + SteveConfig.MAX_TEMPLATES_PER_PLAN.get() + " templates. "
+            + "Do NOT gather/mine/craft/pathfind first — the player will /steve approve before "
+            + "any blocks are placed. Player's request: " + description;
+        pendingCommands.add(augmented);
+        if (reactAgent == null && currentAction == null) {
+            sendToGUI(steve.getSteveName(), "Planning: " + description);
+            drainNextCommand();
+        } else {
+            sendToGUI(steve.getSteveName(),
+                "Will plan after current task (queue: " + pendingCommands.size() + ")");
+        }
     }
 
     public boolean isExecuting() {

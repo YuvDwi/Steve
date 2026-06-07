@@ -10,7 +10,7 @@
 - 最近动作列表（保留最后 20 条）
 - 当前目标 (`currentGoal`)：ReAct 启动时设，停止时清
 
-**长期记忆**：通过 `queryLongTermMemory(query)` 调 `mempalace:mempalace_list_drawers(wing=steve_memory, room={steveName}, query={...})` 查询。**不再使用 NBT 持久化**。
+**长期记忆**：通过 `queryLongTermMemory(query)` 调 `mempalace:mempalace_query(wing=steve_memory, room={steveName}, query={...})` 查询。**不再使用 NBT 持久化**。
 
 ### WorldKnowledge.java
 
@@ -32,6 +32,6 @@
 **变更前**：记忆数据通过 NBT 持久化到 Minecraft 存档（`saveToNBT` / `loadFromNBT`）。已删除。
 
 **变更后**：长期记忆走 mempalace：
-- `SteveMemory.queryLongTermMemory(query)` 调 `MCPToolRegistry.callTool("mempalace:mempalace_list_drawers", Map.of("wing", "steve_memory", "room", steveName, "query", query))`
+- `SteveMemory.queryLongTermMemory(query)` 调 `MCPToolRegistry.callTool("mempalace:mempalace_query", Map.of("wing", "steve_memory", "room", steveName, "query", query))`
 - 短期动作历史保留在内存（`addAction`），跨 ReAct 会话不持久化
 - 跨世界数据独立于 Minecraft 存档（存在 mempalace 外部服务）

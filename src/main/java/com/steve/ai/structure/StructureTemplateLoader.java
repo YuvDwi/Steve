@@ -43,13 +43,19 @@ public class StructureTemplateLoader {
         public final int width;
         public final int height;
         public final int depth;
+        public final BlockPos origin;
 
         public LoadedTemplate(String name, List<TemplateBlock> blocks, int width, int height, int depth) {
+            this(name, blocks, width, height, depth, null);
+        }
+
+        public LoadedTemplate(String name, List<TemplateBlock> blocks, int width, int height, int depth, BlockPos origin) {
             this.name = name;
             this.blocks = blocks;
             this.width = width;
             this.height = height;
             this.depth = depth;
+            this.origin = origin;
         }
     }
 
@@ -191,8 +197,22 @@ public class StructureTemplateLoader {
             LoadedTemplate template = loadFromFile(file, name);
             if (template == null) return;
 
-            MCPClientWrapper client = new MCPClientWrapper("mempalace", "http://localhost:6060");
+            // Resolve the mempalace URL from SteveConfig.MCP_SERVERS rather than
+            // hardcoding localhost. If the server isn't configured, skip the
+            // registration quietly — NBT files can still be built without it.
+            String mempalaceUrl = com.steve.ai.mcp.MCPToolRegistry.getServerUrl("mempalace");
+            if (mempalaceUrl == null) {
+                SteveMod.LOGGER.debug("mempalace not configured; skipping registration of '{}'", template.name);
+                return;
+            }
+
+            MCPClientWrapper client = new MCPClientWrapper("mempalace", mempalaceUrl);
             client.initialize();
+            if (!client.isInitialized()) {
+                SteveMod.LOGGER.warn("MCP client for '{}' did not initialize; skipping mempalace registration",
+                    mempalaceUrl);
+                return;
+            }
 
             String content = String.format("Type: %s | Structure '%s' %dx%dx%d with %d blocks",
                 type, template.name, template.width, template.height, template.depth, template.blocks.size());

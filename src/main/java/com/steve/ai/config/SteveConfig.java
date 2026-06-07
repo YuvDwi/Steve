@@ -15,12 +15,15 @@ public class SteveConfig {
     public static final ForgeConfigSpec.BooleanValue CREATIVE_MODE;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STEVES;
     public static final ForgeConfigSpec.IntValue BUILD_TICK_DELAY;
+    public static final ForgeConfigSpec.IntValue MAX_TEMPLATES_PER_PLAN;
     public static final ForgeConfigSpec.BooleanValue MCP_ENABLED;
     public static final ForgeConfigSpec.ConfigValue<String> MCP_SERVERS;
     public static final ForgeConfigSpec.IntValue MCP_TIMEOUT_MS;
     public static final ForgeConfigSpec.IntValue REACT_MAX_STEPS;
     public static final ForgeConfigSpec.IntValue REACT_OBS_TRUNCATE;
     public static final ForgeConfigSpec.IntValue REACT_FAIL_TOLERANCE;
+    public static final ForgeConfigSpec.IntValue DASHBOARD_PORT;
+    public static final ForgeConfigSpec.ConfigValue<String> DASHBOARD_FRONTEND_URL;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -79,6 +82,10 @@ public class SteveConfig {
             .comment("Ticks between each block placement during building (20 ticks = 1 second, default 20 = 1 block/sec)")
             .defineInRange("buildTickDelay", 20, 1, 200);
 
+        MAX_TEMPLATES_PER_PLAN = builder
+            .comment("Maximum number of NBT templates the LLM may combine in one /steve plan (1-10)")
+            .defineInRange("maxTemplatesPerPlan", 4, 1, 10);
+
         builder.pop();
 
         builder.comment("MCP (Model Context Protocol) Configuration").push("mcp");
@@ -110,6 +117,21 @@ public class SteveConfig {
         REACT_FAIL_TOLERANCE = builder
             .comment("Consecutive LLM parse failures before giving up (1-10)")
             .defineInRange("maxConsecutiveFailures", 3, 1, 10);
+
+        builder.pop();
+
+        builder.comment("HTTP Dashboard Configuration (external HTML plan UI)").push("dashboard");
+
+        DASHBOARD_PORT = builder
+            .comment("Port the /steve dashboard embedded HTTP server binds to. 127.0.0.1 only.")
+            .defineInRange("port", 8765, 1024, 65535);
+
+        DASHBOARD_FRONTEND_URL = builder
+            .comment("URL the /steve dashboard command tells the player to open. "
+                + "The embedded HTTP server only serves /events and /command; the "
+                + "real UI lives at this URL (Vite dev server in development, "
+                + "or a static host in production).")
+            .define("frontendUrl", "http://localhost:5173");
 
         builder.pop();
 

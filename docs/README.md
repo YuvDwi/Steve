@@ -35,5 +35,6 @@
 
 黑客马拉松期间开发的施工系统相关文档：
 
-1. [施工无人工地](hackathon/01-construction-site.md) - 多工种施工系统设计
-2. [道路施工](hackathon/02-road-construction.md) - 道路建设系统设计
+1. [mempalace 集成](hackathon/01-mempalace-integration.md) - mempalace × ReAct 模板调度
+2. [四阶段 plan 模式](hackathon/02-plan-mode.md) - plan-then-build 状态机
+3. [外部 HTML Plan Dashboard](hackathon/施工流程.md) - HTTP server + React + Three.js UI

@@ -37,6 +37,7 @@ public class ReActAgent {
     private volatile boolean finished = false;
     private volatile boolean failed = false;
     private volatile String finalAnswer = null;
+    private volatile String pendingFinalAnswer = null;
     private volatile String failureMessage = null;
     private volatile ResponseParser.ParsedResponse pendingStep = null;
     private volatile int stepCount = 0;
@@ -133,6 +134,20 @@ public class ReActAgent {
 
                 if (step.isFinal()) {
                     String answer = step.getFinalAnswer() != null ? step.getFinalAnswer() : step.getReasoning();
+                    // If the final step also carries a task (e.g. LLM emits
+                    // {"is_final": true, "action": "build", ...}), dispatch the
+                    // task first so it actually runs. The agent will only mark
+                    // itself finished once the action's observation is fed back
+                    // — at which point the game thread will re-tick and see
+                    // finished=true with no pending step.
+                    if (!step.getTasks().isEmpty() && isAllowedAction(step.getTasks().get(0).getAction())) {
+                        SteveMod.LOGGER.info("[ReAct step {}/{}] FINAL-with-task: deferring finish until action dispatched: {}",
+                            stepNum, maxSteps, answer);
+                        pendingStep = step;
+                        observationPending = true;
+                        pendingFinalAnswer = answer;
+                        return;
+                    }
                     SteveMod.LOGGER.info("[ReAct step {}/{}] FINAL: {}",
                         stepNum, maxSteps, answer);
                     markFinished(answer);
@@ -328,6 +343,16 @@ public class ReActAgent {
             String status = result.isSuccess() ? "OK" : "FAIL";
             String msg = result.getMessage();
             feedObservationInternal("[" + status + "] " + (msg == null || msg.isEmpty() ? "(empty)" : msg));
+        }
+        // If the LLM emitted is_final=true alongside a task, we deferred the
+        // finish until the action's observation came back. Now that the
+        // action has actually executed, mark the agent finished with the
+        // original final answer — do not call the LLM again.
+        String deferred = pendingFinalAnswer;
+        if (deferred != null) {
+            pendingFinalAnswer = null;
+            markFinished(deferred);
+            return;
         }
         scheduleNext(client, baseParams);
     }

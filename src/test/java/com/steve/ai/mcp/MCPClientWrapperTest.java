@@ -13,7 +13,7 @@ import java.util.Map;
 public class MCPClientWrapperTest {
 
     private static final String SERVER_NAME = "mempalace";
-    private static final String SERVER_URL = "http://localhost:6060";
+    private static final String SERVER_URL = "http://43.156.170.26:6060";
 
     @Test
     void testMcpConnection() throws Exception {

@@ -14,8 +14,9 @@
 
 | 动作 | 功能 |
 |------|------|
+| `PlanBuildAction` | 四阶段 plan-then-build 状态机（`BuildStructureAction` 已弃用，仅保留兼容） |
 | `MineBlockAction` | 智能采矿，带路径规划 |
-| `BuildStructureAction` | 程序化建筑和模板建筑（支持仓库自动补给） |
+| `BuildStructureAction` | 程序化建筑和模板建筑（支持仓库自动补给，**已弃用**，仍被 `CoreActionsPlugin` 注册供旧路径调用） |
 | `PlaceBlockAction` | 单方块放置（带验证） |
 | `PathfindAction` | 导航到坐标 |
 | `CombatAction` | 目标战斗 |
@@ -25,6 +26,9 @@
 | `PlaceWarehouseAction` | 放置仓库箱子 |
 | `WarehouseRefillHandler` | 建造缺材料时自动从仓库补给 |
 | `MCPAction` | 调用 MCP 工具（参数 `tool="serverName:toolName"`, `args={...}`） |
+
+`CoreActionsPlugin` 通过 `ActionRegistry` 注册了 8 个基础动作：`pathfind / mine / gather / place / build / craft / attack / follow`。
+`build` action 在 `ActionExecutor.createActionLegacy` 里被**拦截**到 `PlanBuildAction`（`ActionExecutor.java:334`），所以 ReAct 模式下 `action="build"` 实际走的是 `PlanBuildAction.runDesign` + `runConstruction` 四阶段流程。
 
 ## 执行流程（ReAct 主循环）
 
@@ -42,6 +46,10 @@
 **重要**：玩家在 ReAct 进行中发新指令时，新指令**入队不打断**，当前 ReAct 完成后顺序处理（`stopCurrentAction` 会清空队列）。
 
 ## BuildStructureAction 实现
+
+> **已弃用**：当前 ReAct/plan 模式全部走 `PlanBuildAction.runDesign` + `runConstruction`。
+> `BuildStructureAction` 仍存在但只被 `CoreActionsPlugin` 之外的老路径调用，保留向后兼容。
+> 下面流程图描述的是该旧实现，新代码请参考 `PlanBuildAction` 源码。
 
 ### 完整流程
 
@@ -76,7 +84,7 @@ BuildStructureAction.onTick() 每 tick:
 | **程序化生成** | `StructureGenerators.generate()` — 8 种内置建筑类型（无 .nbt 时的回退） |
 | **协作建造** | `CollaborativeBuildManager` 分象限分配方块，多 Steve 并行放置 |
 | **仓库补给** | 材料不足时 `WarehouseRefillHandler` 自动去最近仓库取材料，取完返回继续建造 |
-| **位置归档** | 建造完成后 ReAct 调 `mempalace_add_drawer(wing=built_structures)` 写入 mempalace |
+| **位置归档** | CONSTRUCTION 完成后 `PlanBuildAction` 在 `CONSTRUCTION → COMPLETED` 转换时自动调 `mempalace_add_drawer(wing=built_structures)` 写入 mempalace（不再由 ReAct agent 触发） |
 | **飞行** | 建造时 Steve 启用飞行 (`steve.setFlying(true)`)，完成后关闭 |
 
 ## 插件架构

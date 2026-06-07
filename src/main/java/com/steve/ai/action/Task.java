@@ -1,5 +1,9 @@
 package com.steve.ai.action;
 
+import com.google.gson.JsonArray;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class Task {
@@ -31,6 +35,29 @@ public class Task {
     public String getStringParameter(String key, String defaultValue) {
         Object value = parameters.get(key);
         return value != null ? value.toString() : defaultValue;
+    }
+
+    public List<String> getStringListParameter(String key) {
+        Object value = parameters.get(key);
+        if (value == null) return null;
+        if (value instanceof JsonArray arr) {
+            List<String> out = new ArrayList<>(arr.size());
+            arr.forEach(e -> out.add(e.getAsString()));
+            return out;
+        }
+        if (value instanceof List<?> list) {
+            List<String> out = new ArrayList<>(list.size());
+            for (Object o : list) {
+                if (o != null) out.add(o.toString());
+            }
+            return out;
+        }
+        return null;
+    }
+
+    public List<String> getStringListParameter(String key, List<String> defaultValue) {
+        List<String> v = getStringListParameter(key);
+        return v != null ? v : defaultValue;
     }
 
     public int getIntParameter(String key, int defaultValue) {

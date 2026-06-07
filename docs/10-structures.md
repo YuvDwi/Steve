@@ -1,21 +1,25 @@
 # 可建造结构
 
-Steve 有两种生成结构的方式，按优先级排列：
+Steve 当前只支持一种生成结构的方式：**NBT 模板**。
 
-1. **NBT 模板**（优先） — 从文件加载设计师制作的结构
-2. **程序化生成**（兜底） — 通过算法实时生成
+> **已废弃**：之前文档里提到的"程序化生成（`StructureGenerators`）"已删除。
+> 所有 build 走 NBT 模板，模板列表由 `config/steve/structures/*.nbt` 决定。
+> 无匹配 NBT 时 `PlanBuildAction.runDesign` 会 `ActionResult.failure("None of the requested NBT templates could be loaded")`，**不再有兜底生成**。
+>
+> 下面程序化生成结构表保留作为历史参考，**不再生效**。
 
 ## 生成流程
 
 ```
-玩家指令 → LLM 解析 → BuildStructureAction
-  ├── 1. tryLoadFromTemplate()    查找 config/steve/structures/*.nbt
-  │     └── 找到 → 使用模板，忽略尺寸参数
-  └── 2. StructureGenerators     NBT 未找到时走程序化生成
-        └── 使用 LLM 传入的 width/height/depth
+玩家指令 → LLM 解析 → ReAct 输出 action="build" → 拦截到 PlanBuildAction
+  ├── 1. PlanBuildAction.runDesign
+  │     └── StructureTemplateLoader.loadFromNBT(name)
+  │           └── 找到 → 使用模板，按 origin 偏移在世界坐标铺开
+  └── 2. 加载失败
+        └── ActionResult.failure("None of the requested NBT templates could be loaded")
 ```
 
-## 程序化生成结构列表
+## 程序化生成结构列表（已废弃，仅供历史参考）
 
 | 结构类型 | 别名 | 默认尺寸 | 材料 | 说明 |
 |---------|------|---------|------|------|
@@ -27,8 +31,6 @@ Steve 有两种生成结构的方式，按优先级排列：
 | `wall` | — | 用户指定 | 使用第一个材料 | 单层墙壁 |
 | `platform` | — | 用户指定 | 使用第一个材料 | 平台/地板 |
 | `box` | `cube` | 用户指定 | 使用第一个材料 | 实心方块 |
-
-LLM prompt 中暴露给 AI 的程序化类型为 `castle, tower, barn, modern`，其余类型通过代码 switch 兜底匹配。
 
 ## 使用方式
 
@@ -63,7 +65,7 @@ build castle with width 20 height 15 depth 20
 
 ## NBT 模板
 
-NBT 模板优先于程序化生成。将 `.nbt` 文件放入运行时配置目录：
+`PlanBuildAction` 的唯一结构来源。将 `.nbt` 文件放入运行时配置目录：
 
 ```
 <minecraft>/config/steve/structures/
@@ -71,8 +73,8 @@ NBT 模板优先于程序化生成。将 `.nbt` 文件放入运行时配置目�
 
 - 文件名即为结构名（如 `house.nbt` → `build house`）
 - 支持多种命名格式自动匹配：`name.nbt`、`name_lower.nbt`、`snake_case.nbt`
-- LLM prompt 会动态读取目录下的模板名列表，供 AI 识别
-- 放入 NBT 文件后，对应的程序化生成类型会被"覆盖"（NBT 优先）
+- LLM prompt 会动态读取目录下的模板名列表（`StructureTemplateLoader.getAvailableStructures()`），供 AI 识别
+- 启动时 `StructureTemplateLoader` 扫描该目录并注册到 mempalace（`wing=structure_{type}, room={name}`），LLM 通过 `mempalace_list_drawers` 发现
 
 ## 材料仓库
 

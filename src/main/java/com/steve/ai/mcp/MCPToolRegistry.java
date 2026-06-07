@@ -125,6 +125,36 @@ public class MCPToolRegistry {
     }
 
     /**
+     * Look up the configured URL for an MCP server by name.
+     *
+     * <p>Reads {@code SteveConfig.MCP_SERVERS} (a JSON array of
+     * {@code {"name","url"} objects}) and returns the first matching URL.
+     * Used by code outside the registry (e.g.
+     * {@code StructureTemplateLoader.registerStructureToMempalace}) that
+     * needs a configured mempalace URL without re-parsing the config.</p>
+     *
+     * @return the configured URL, or {@code null} if MCP is disabled, the
+     *         config is empty/malformed, or no server with that name is
+     *         configured.
+     */
+    public static String getServerUrl(String name) {
+        try {
+            if (!SteveConfig.MCP_ENABLED.get()) return null;
+            String json = SteveConfig.MCP_SERVERS.get();
+            if (json == null || json.isEmpty() || json.equals("[]")) return null;
+            Type listType = new TypeToken<List<ServerConfig>>() {}.getType();
+            List<ServerConfig> servers = GSON.fromJson(json, listType);
+            if (servers == null) return null;
+            for (ServerConfig s : servers) {
+                if (name.equals(s.name)) return s.url;
+            }
+        } catch (Exception e) {
+            SteveMod.LOGGER.warn("Failed to look up MCP server URL for '{}': {}", name, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
      * Shutdown all MCP connections.
      */
     public void shutdown() {
