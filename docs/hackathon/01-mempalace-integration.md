@@ -22,8 +22,8 @@
 | ReAct 主循环 | `llm/react/ReActAgent` | Thought → Action → Observation 迭代 |
 | LLM 调度 | `llm/PromptBuilder.buildReActSystemPrompt` | 把 MCP 工具列表注入到系统提示词 |
 | 工具执行 | `action/actions/MCPAction` | LLM 输出 `action="mcp"` 时调用 |
-| 位置归档 | `MCPAction` (mempalace_add_drawer) | 建造完成后写 `wing=built_structures` |
-| 长期记忆 | `memory/SteveMemory.queryLongTermMemory` | 调 mempalace 检索历史对话 |
+| 位置归档 | `action/actions/PlanBuildAction.archiveToMempalace` | CONSTRUCTION → COMPLETED 时自动写 `wing=built_structures` |
+| 长期记忆 | `memory/SteveMemory.queryLongTermMemory` | 调 `mempalace:mempalace_query` 检索历史对话 |
 
 ### 1.3 NBT 命名规范
 
@@ -69,13 +69,13 @@ flowchart TB
         R12 --> R13[Observation: castle 30x20x30]
         R13 --> R14[ReActAgent.feedObservation]
         R14 --> R15[LLM 输出 step 3: action=build structure=castle]
-        R15 --> R16[executeTask BuildStructureAction]
-        R16 --> R17[CollaborativeBuildManager 协同放置方块]
-        R17 --> R18{建造完成?}
-        R18 -->|是| R19[ActionResult 喂回 ReActAgent]
-        R19 --> R20[LLM 输出 step 4: mcp add_drawer wing=built_structures]
-        R20 --> R21[mempalace_add_drawer 位置归档]
-        R21 --> R22[LLM 输出 step 5: is_final=true, final_answer]
+        R15 --> R16[executeTask → 拦截到 PlanBuildAction]
+        R16 --> R17[runDesign: 加载 NBT 模板 + 推 PlanDesignReadyEvent]
+        R17 --> R18[玩家 /steve approve（或 dashboard Approve）]
+        R18 --> R19[runConstruction: placeNextBlock 每 BUILD_TICK_DELAY tick 放一块]
+        R19 --> R20[CONSTRUCTION → COMPLETED 时 archiveToMempalace wing=built_structures]
+        R20 --> R21[ActionResult 喂回 ReActAgent]
+        R21 --> R22[LLM 输出 step N: is_final=true, final_answer]
         R22 --> R23[GUI 显示: 城堡建好了]
         R23 --> R24{队列空?}
         R24 -->|否| R5
@@ -126,11 +126,11 @@ sequenceDiagram
     participant Agent as ReActAgent
     participant LLM as 大模型
     participant MCPAction as MCPAction
-    participant Builder as BuildStructureAction
+    participant Plan as PlanBuildAction
     participant Palace as mempalace
 
-    User->>Executor: /steve tell Steve 在这建个城堡
-    Executor->>Executor: pendingCommands.add("在这建个城堡")
+    User->>Executor: /steve plan 在这建个城堡
+    Executor->>Executor: pendingCommands.add("[PLAN MODE] ... 在这建个城堡")
     Executor->>Agent: new ReActAgent(steve, cmd, maxSteps=12, obsTruncate=800, maxFail=3)
     Executor->>Agent: startAsync(asyncClient, params)
     Agent->>LLM: sendAsync(buildReActUserPrompt + systemPrompt)
@@ -143,14 +143,15 @@ sequenceDiagram
     Executor->>Agent: feedObservation(result, client, params)
     Agent->>LLM: sendAsync(prompt with scratchpad)
     LLM-->>Agent: {action: "build", structure: "castle"}
-    Executor->>Builder: new BuildStructureAction
-    Builder->>Builder: load castle.nbt + 协同放置方块
-    Builder-->>Executor: ActionResult.success("Built castle at [100,64,-200]")
+    Executor->>Plan: new PlanBuildAction (case "build" 在 createActionLegacy 拦截)
+    Plan->>Plan: runDesign 加载 castle.nbt + 推 PlanDesignReadyEvent + 归档 mempalace build_designs
+    Plan-->>Executor: 进入 AWAITING_DESIGN_APPROVAL
+    User->>Executor: /steve approve
+    Executor->>Plan: approve() → transitionTo(CONSTRUCTION)
+    Plan->>Plan: runConstruction placeNextBlock 每 BUILD_TICK_DELAY tick 放一块
+    Plan->>Palace: archiveToMempalace wing=built_structures room=castle_<id>
+    Plan-->>Executor: ActionResult.success("Built 8432 blocks for project #<id>")
     Executor->>Agent: feedObservation
-    Agent->>LLM: sendAsync
-    LLM-->>Agent: {action: "mcp", tool: "mempalace_add_drawer", args: {wing: "built_structures", room: "castle", content: "..."}}
-    Executor->>MCPAction: add_drawer
-    MCPAction->>Palace: write to built_structures/castle
     Agent->>LLM: sendAsync
     LLM-->>Agent: {is_final: true, final_answer: "城堡建好了 at [100,64,-200]"}
     Agent-->>Executor: finished, finalAnswer
@@ -190,7 +191,7 @@ sequenceDiagram
 | `structure_template` | 建筑模板元信息 | 启动时 `StructureTemplateLoader` | LLM 通过 `mempalace_list_drawers` 查询 |
 | `structure_decoration` | 装饰类模板 | 启动时 | LLM 查询 |
 | `structure_default` | 无下划线文件名（默认 type） | 启动时 | LLM 查询 |
-| `built_structures` | 已建造建筑位置 | 建造完成后 ReAct 写回 | 后续查询 / 避免重复建造 |
+| `built_structures` | 已建造建筑位置 | CONSTRUCTION → COMPLETED 时 `PlanBuildAction.archiveToMempalace` 自动写 | 后续查询 / 避免重复建造 |
 | `steve_memory` | 长期记忆（按 steve 名称 room） | 玩家交互时 `SteveMemory.addAction` | `SteveMemory.queryLongTermMemory` |
 
 ### 4.2 Drawer 格式示例
@@ -358,10 +359,10 @@ sequenceDiagram
     participant A as ReActAgent
     participant L as LLM
     participant M as mempalace
-    participant W as BuildStructureAction
+    participant P as PlanBuildAction
 
-    H->>S: /steve tell Steve 在这建个城堡
-    S->>A: start
+    H->>S: /steve plan 在这建个城堡
+    S->>A: start (augmented: [PLAN MODE] ...)
     A->>L: step 1
     L-->>A: thought: 需要查模板<br/>action: mcp tool=mempalace:list_drawers
     A->>M: list_drawers wing=structure_template
@@ -371,14 +372,16 @@ sequenceDiagram
     A->>M: get_drawer room=castle
     M-->>A: 30x20x30 with 8432 blocks
     A->>L: step 3
-    L-->>A: thought: 开始建造<br/>action: build structure=castle
-    A->>W: 加载 castle.nbt, 协同放置
-    W-->>A: ActionResult "Built 8432 blocks"
+    L-->>A: thought: 开始建<br/>action: build structures=[castle]
+    A->>P: new PlanBuildAction (拦截 build)
+    P->>P: runDesign 加载 castle.nbt + 推 PlanDesignReadyEvent + 归档 build_designs
+    P-->>A: ActionResult 进入 AWAITING_DESIGN_APPROVAL
+    H->>S: /steve approve (或 dashboard Approve)
+    S->>P: approve() → transitionTo(CONSTRUCTION)
+    P->>P: runConstruction placeNextBlock 每 BUILD_TICK_DELAY tick 放一块
+    P->>M: archiveToMempalace wing=built_structures room=castle_<id>
+    P-->>A: ActionResult "Built 8432 blocks for project #<id>"
     A->>L: step 4
-    L-->>A: thought: 归档位置<br/>action: mcp add_drawer wing=built_structures
-    A->>M: add_drawer
-    M-->>A: OK
-    A->>L: step 5
     L-->>A: is_final=true, final_answer="城堡建好了 at [100,64,-200]"
     A-->>S: finished
     S->>H: GUI: 城堡建好了 at [100,64,-200]
