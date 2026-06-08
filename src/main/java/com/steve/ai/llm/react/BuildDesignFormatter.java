@@ -27,17 +27,18 @@ public final class BuildDesignFormatter {
      *  Single-template output keeps the original format byte-for-byte; multi-template output
      *  shows a per-building breakdown with a global totals row. */
     public static String body(BuildProject project) {
-        if (project.templates.isEmpty()) {
+        if (project.placedModules.isEmpty()) {
             return "(no templates loaded)";
         }
-        if (project.templates.size() == 1) {
+        if (project.placedModules.size() == 1) {
             return bodySingle(project);
         }
         return bodyMulti(project);
     }
 
     private static String bodySingle(BuildProject project) {
-        var t = project.templates.get(0);
+        var pm = project.placedModules.get(0);
+        var t = pm.template;
         int footprint = t.width * t.depth;
         int total = t.blocks.size();
         int etaTicks = project.totalBlocks * 5; // BUILD_TICK_DELAY default
@@ -58,12 +59,13 @@ public final class BuildDesignFormatter {
     private static String bodyMulti(BuildProject project) {
         int footprintTotal = 0;
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(Locale.ROOT, "子建筑清单 (%d 个):\n", project.templates.size()));
-        for (int i = 0; i < project.templates.size(); i++) {
-            var t = project.templates.get(i);
-            net.minecraft.core.BlockPos o = t.origin != null ? t.origin : project.originPos;
+        sb.append(String.format(Locale.ROOT, "子建筑清单 (%d 个):\n", project.placedModules.size()));
+        for (int i = 0; i < project.placedModules.size(); i++) {
+            var pm = project.placedModules.get(i);
+            var t = pm.template;
+            net.minecraft.core.BlockPos o = pm.worldOrigin != null ? pm.worldOrigin : project.originPos;
             footprintTotal += t.width * t.depth;
-            sb.append(String.format(Locale.ROOT, "\n[%d/%d] %s\n", i + 1, project.templates.size(), t.name));
+            sb.append(String.format(Locale.ROOT, "\n[%d/%d] %s\n", i + 1, project.placedModules.size(), t.name));
             sb.append(String.format(Locale.ROOT, "  尺寸: %d × %d × %d (长 × 高 × 深)\n", t.width, t.height, t.depth));
             sb.append(String.format(Locale.ROOT, "  占地: %d 平方米\n", t.width * t.depth));
             sb.append(String.format(Locale.ROOT, "  块数: %d\n", t.blocks.size()));
@@ -71,7 +73,7 @@ public final class BuildDesignFormatter {
         }
         sb.append("\n--------------------------------------------\n");
         sb.append(String.format(Locale.ROOT, "总计: %d 子建筑, %d 块, 占地 %d 平方米\n",
-            project.templates.size(), project.totalBlocks, footprintTotal));
+            project.placedModules.size(), project.totalBlocks, footprintTotal));
         sb.append("材料清单:").append(System.lineSeparator());
         appendMaterials(sb, project.materials, project.totalBlocks);
         sb.append("协同分区: 4 个象限, 单 Steve 承担全部").append(System.lineSeparator());

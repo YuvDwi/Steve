@@ -60,6 +60,45 @@ public class Task {
         return v != null ? v : defaultValue;
     }
 
+    /**
+     * Read a parameter as a list of object maps — the shape used by the
+     * module-composition protocol. Returns {@code null} when the key is
+     * missing; returns an empty list when the key is present but the value
+     * is not a list of maps. Elements that are not {@code Map}s are dropped
+     * silently (the caller decides what to do with a malformed payload).
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getModuleListParameter(String key) {
+        Object value = parameters.get(key);
+        if (value == null) return null;
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (value instanceof JsonArray arr) {
+            arr.forEach(e -> {
+                if (e != null && e.isJsonObject()) {
+                    // Gson JsonObject implements Map<String, JsonElement>; the
+                    // canonical shape we want is Map<String, Object>. Round-trip
+                    // through a plain HashMap to keep callers insulated from Gson.
+                    out.add(new java.util.HashMap<>(e.getAsJsonObject().asMap()));
+                }
+            });
+            return out;
+        }
+        if (value instanceof List<?> list) {
+            for (Object o : list) {
+                if (o instanceof Map<?, ?> m) {
+                    out.add((Map<String, Object>) m);
+                }
+            }
+            return out;
+        }
+        return null;
+    }
+
+    public List<Map<String, Object>> getModuleListParameter(String key, List<Map<String, Object>> defaultValue) {
+        List<Map<String, Object>> v = getModuleListParameter(key);
+        return v != null ? v : defaultValue;
+    }
+
     public int getIntParameter(String key, int defaultValue) {
         Object value = parameters.get(key);
         if (value instanceof Number) {

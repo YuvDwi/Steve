@@ -26,8 +26,6 @@
 
 ## 1. 协议 (LLM → PlanBuildAction)
 
-### 新协议
-
 ```json
 {"structures": [
   {"name": "rail_straight_8", "dx": 0, "dy": 0, "dz": 0, "facing": "S"},
@@ -42,25 +40,16 @@
 - `facing` (one of `N|E|S|W`, default `S`) — 绕 Y 轴 90° 旋转,作用于本模块的局部坐标。**S = +Z** 对齐 vanilla `StructureTemplate` 默认朝向。
 - `anchor` (optional, **reserved**) — 协议预留,本版本忽略。
 
-### 旧协议(继续支持,行为零变化)
+### LLM 拼装规则 (强制)
 
-```json
-{"structures": ["house_1", "fence"]}
-```
+- 任何**非平凡**结构(房子、车站、墙、花园),**必须**用 `structures` 数组形式,通常 ≥3 个 entry —— 一个房子大概需要"主体 + 屋顶 + 门(窗/围栏)"三段以上才算完整。
+- **不要**在 `structures` 数组里只发单个 entry,除非玩家明确指定"放一个 `<name>`"(如 `放 房子_1`)。
+- 长线状结构(铁轨、高速公路、长城、运河)**必须**用 `structures` 数组,每段一个 piece,允许在弯头处用不同 `facing` 拼出折线。
+- 不知道怎么分时,按"主体 → 顶/盖 → 入口/装饰"三段写。
 
-在 `PlanBuildAction` 入口处自动转成新协议 `{name, dx: previousWidth+1, dy: 0, dz: 0, facing: "S"}`,精确复现 `originX += width + 1` 行为。LLM / 玩家 / mempalace 旧 prompt **不需要任何改动**。
+### 历史备注
 
-### 5 行 old vs new
-
-```
-Old: {"structures": ["house_1", "fence"]}
-New: {"structures": [
-  {"name": "house_1", "dx": 0, "dy": 0, "dz": 0, "facing": "S"},
-  {"name": "fence",   "dx": <house_1.width+1>, "dy": 0, "dz": 0, "facing": "S"}
-]}
-```
-
-**两者结果完全一致**:房子在原点,围栏在 `house_1.width + 1` 处的 +X 方向。
+早期 `["house_1", "fence"]` 旧协议在新版本中已废弃(`PlanBuildAction` 不再接受),所有 LLM 输出和 mempalace 存档一律用新协议。
 
 ---
 
@@ -254,14 +243,26 @@ emit PlanDesignReadyEvent(...)                 // 这里也走 ModuleTransform.a
 3. 走到每个弯点目视验证方向正确(无镜像错位)
 4. dashboard 像素级 ≈ 世界位置
 
-### 回归
+### 端到端 plan-mode 验证(plan-mode augmentation 是 ≥2 规则与新协议的权威来源)
 
 ```
 /steve plan "建个小屋"
-# 期望 LLM 输出老协议: {"structures": ["house_1"]}
+# 期望 LLM 输出 (新协议 + ≥2 entries):
+# {"structures": [
+#   {"name": "房子_主体", "facing": "S"},
+#   {"name": "房子_屋顶", "dx": 0, "dy": 6, "facing": "S"}
+# ]}
 /steve approve
-# 期望 房子位置和上一版 Steve 完全一致
+# 期望: 两段 piece 依次放置,完整房子
+
+# 玩家明确单 piece 请求(合法路径未破坏):
+/steve plan "放 房子_1"
+# LLM 发单 entry: {"structures": [{"name": "房子_1"}]} -> 系统接受 -> 1 piece 设计书
 ```
+
+> Plan-mode augmentation is the canonical source for the ≥2-entry rule and the new map-array protocol; see `ActionExecutor.startPlannedBuild` (`src/main/java/com/steve/ai/action/ActionExecutor.java:408-417`).
+>
+> 旧 `["house_1"]` 字符串协议已废弃 — `Task.getModuleListParameter` 看到 `List<String>` 返回 `null`,LLM 发老协议会得到 "None of the requested NBT templates could be loaded" 失败。不再兼容。
 
 ---
 
@@ -303,5 +304,5 @@ emit PlanDesignReadyEvent(...)                 // 这里也走 ModuleTransform.a
 6. `placeNextBlock` + `buildSnapshot` 改走 `ModuleTransform.apply`
 7. `PromptBuilder` 改两段 prompt doc
 8. 端到端 Minecraft 测试(高铁 demo)
-9. 回归测试(老 `["house_1"]` 协议)
+9. 端到端 plan-mode 验证(新协议 + ≥2 entries, 见 §7 端到端块)
 10. 把本文件挪到 `docs/hackathon/03-module-composition.md`,更新 `施工流程.md` 末尾的链接表

@@ -64,10 +64,6 @@ public class CoreActionsPlugin implements ActionPlugin {
             (steve, task, ctx) -> new PlaceBlockAction(steve, task),
             priority, PLUGIN_ID);
 
-        registry.register("build",
-            (steve, task, ctx) -> new BuildStructureAction(steve, task),
-            priority, PLUGIN_ID);
-
         // Crafting
         registry.register("craft",
             (steve, task, ctx) -> new CraftItemAction(steve, task),

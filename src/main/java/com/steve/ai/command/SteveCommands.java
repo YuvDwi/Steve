@@ -80,7 +80,8 @@ public class SteveCommands {
             // /steve plan <description> — LLM 选模板、出设计书、等玩家 approve
             .then(Commands.literal("plan")
                 .then(Commands.argument("description", StringArgumentType.greedyString())
-                    .executes(SteveCommands::planBuild)))
+                    .executes(ctx -> SteveCommands.planBuild(
+                        StringArgumentType.getString(ctx, "description"), ctx))))
             // 这三个不带 name 参数 — 自动作用于玩家附近有活跃 BuildProject 的最近 Steve
             .then(Commands.literal("approve")
                 .executes(SteveCommands::approveBuild))
@@ -244,6 +245,27 @@ public class SteveCommands {
         return nearest;
     }
 
+    /** Locate the nearest Steve to the issuing player, regardless of whether
+     *  that Steve is currently busy. Mirrors {@link #findSteveWithActiveBuild}
+     *  but drops the "has active build" filter — {@code /steve plan} is for
+     *  kicking off a new build, so the Steve may be idle or already mid-task. */
+    private static SteveEntity findNearestSteve(Player player) {
+        SteveManager manager = SteveMod.getSteveManager();
+        if (player == null) return null;
+        SteveEntity nearest = null;
+        double nearestDist = Double.MAX_VALUE;
+        for (String name : manager.getSteveNames()) {
+            SteveEntity s = manager.getSteve(name);
+            if (s == null) continue;
+            double d = player.distanceTo(s);
+            if (d < nearestDist) {
+                nearestDist = d;
+                nearest = s;
+            }
+        }
+        return nearest;
+    }
+
     /**
      * {@code /steve approve} — 批准最近 Steve 当前 BuildProject 待批准的阶段。当前用于
      * {@code AWAITING_DESIGN_APPROVAL}（PR2 落地后还会用于 {@code AWAITING_ACCEPTANCE}）。
@@ -310,36 +332,13 @@ public class SteveCommands {
     // ===== /steve plan <description> — LLM-driven plan-mode entry =====
 
     /**
-     * 找玩家附近最近的 Steve（不要求有活跃 build）。{@code /steve plan} 命令用它来选目标。
-     *
-     * @return 最近的 Steve；玩家为 {@code null} 或周围没有 Steve 则返回 {@code null}
+     * Brigadier command body for {@code /steve plan <description>}: locate the
+     * nearest Steve to the issuing player and hand the description to
+     * {@link com.steve.ai.action.ActionExecutor#startPlannedBuild}. The actual
+     * plan-mode prompt template lives in {@code PromptBuilder.buildPlanPrompt}
+     * — this method is just command-layer plumbing.
      */
-    private static SteveEntity findNearestSteve(Player player) {
-        SteveManager manager = SteveMod.getSteveManager();
-        if (player == null) return null;
-        SteveEntity nearest = null;
-        double nearestDist = Double.MAX_VALUE;
-        for (String name : manager.getSteveNames()) {
-            SteveEntity s = manager.getSteve(name);
-            if (s == null) continue;
-            double d = player.distanceTo(s);
-            if (d < nearestDist) {
-                nearestDist = d;
-                nearest = s;
-            }
-        }
-        return nearest;
-    }
-
-    /**
-     * {@code /steve plan <description>} — LLM 驱动的规划模式。流程：找玩家附近的最近 Steve →
-     * 把自然语言描述塞进带 [PLAN MODE] 前缀的 ReAct 命令 → LLM 选 NBT 模板 + emit
-     * action=build → {@code PlanBuildAction.runDesign} 出设计书 + 归档 mempalace →
-     * 停在 {@code AWAITING_DESIGN_APPROVAL} 等 {@code /steve approve}（无超时，
-     * 玩家需手动 /steve approve 或 /steve halt；设计书保留在 mempalace）。
-     */
-    private static int planBuild(CommandContext<CommandSourceStack> context) {
-        String description = StringArgumentType.getString(context, "description");
+    private static int planBuild(String description, CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         Player player = source.getPlayer();
         SteveEntity steve = findNearestSteve(player);

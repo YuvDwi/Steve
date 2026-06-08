@@ -24,11 +24,20 @@ public class ResponseParser {
      * {"thought": "...", "is_final": true, "final_answer": "..."}
      * </pre>
      *
-     * <p>If <code>is_final=true</code> and <code>final_answer</code> present, the
+     * <p>If <code>is_final=true</code> and no <code>action</code> is present, the
      * returned <code>ParsedResponse</code> has empty <code>tasks</code> and
-     * <code>isFinal=true</code>. If a single action is present, <code>tasks</code>
-     * contains exactly one element. Returns <code>null</code> if the input cannot
-     * be parsed as JSON.</p>
+     * <code>isFinal=true</code> — a real final answer with nothing left to do.</p>
+     *
+     * <p>If both <code>is_final=true</code> and a non-empty <code>action</code>
+     * are present, the response carries the task AND is marked final. This is
+     * the "FINAL-with-task deferring" pattern used by
+     * {@code ReActAgent.runStep} to dispatch the action first, then mark the
+     * conversation final after the action completes (e.g. after the player
+     * approves a build). Dropping the task here would silently swallow
+     * downstream actions like {@code PlanBuildAction}.</p>
+     *
+     * <p>Returns <code>null</code> if the input cannot be parsed as JSON, or
+     * has neither <code>action</code> nor <code>is_final=true</code>.</p>
      */
     public static ParsedResponse parseReActStep(String response) {
         if (response == null || response.isEmpty()) {
@@ -42,30 +51,41 @@ public class ResponseParser {
             boolean isFinal = json.has("is_final") && json.get("is_final").getAsBoolean();
             String finalAnswer = json.has("final_answer") ? json.get("final_answer").getAsString() : null;
 
-            if (isFinal) {
+            String action = null;
+            Map<String, Object> parameters = new HashMap<>();
+            if (json.has("action") && !json.get("action").isJsonNull()) {
+                action = json.get("action").getAsString();
+                if (json.has("parameters") && json.get("parameters").isJsonObject()) {
+                    JsonObject paramsObj = json.getAsJsonObject("parameters");
+                    for (String key : paramsObj.keySet()) {
+                        parameters.put(key, extractValue(paramsObj.get(key)));
+                    }
+                }
+            }
+
+            // True final: is_final=true and no action to dispatch. LLM is just
+            // wrapping up the conversation. Empty tasks, conversation over.
+            if (isFinal && (action == null || action.isEmpty())) {
                 String answer = finalAnswer != null ? finalAnswer : thought;
                 SteveMod.LOGGER.info("[ReAct] Parsed final answer: {}", answer);
                 return new ParsedResponse(thought, thought, java.util.Collections.emptyList(), true, answer);
             }
 
-            if (!json.has("action") || json.get("action").isJsonNull()) {
+            if (action == null || action.isEmpty()) {
                 SteveMod.LOGGER.warn("[ReAct] Response missing 'action' field: {}", response);
                 return null;
             }
 
-            String action = json.get("action").getAsString();
-            Map<String, Object> parameters = new HashMap<>();
-            if (json.has("parameters") && json.get("parameters").isJsonObject()) {
-                JsonObject paramsObj = json.getAsJsonObject("parameters");
-                for (String key : paramsObj.keySet()) {
-                    parameters.put(key, extractValue(paramsObj.get(key)));
-                }
-            }
-
             Task task = new Task(action, parameters);
-            SteveMod.LOGGER.info("[ReAct] Parsed step: thought='{}' action={} parameters={}",
-                thought, action, parameters);
-            return new ParsedResponse(thought, thought, List.of(task), false, null);
+            if (isFinal) {
+                SteveMod.LOGGER.info(
+                    "[ReAct] Parsed FINAL-with-task: thought='{}' action={} parameters={} (deferring finish until action dispatched)",
+                    thought, action, parameters);
+            } else {
+                SteveMod.LOGGER.info("[ReAct] Parsed step: thought='{}' action={} parameters={}",
+                    thought, action, parameters);
+            }
+            return new ParsedResponse(thought, thought, List.of(task), isFinal, finalAnswer);
         } catch (Exception e) {
             SteveMod.LOGGER.error("[ReAct] Failed to parse step: {}", response, e);
             return null;
@@ -84,6 +104,19 @@ public class ResponseParser {
             } else {
                 return value.getAsString();
             }
+        }
+        if (value.isJsonObject()) {
+            // Recurse into the object so nested structures (e.g. the
+            // module-composition {name, dx, dy, dz, facing} entries) come
+            // through as plain Map<String,Object> with primitive values
+            // — not as a serialized JSON string the caller would have to
+            // re-parse.
+            JsonObject obj = value.getAsJsonObject();
+            Map<String, Object> map = new HashMap<>(obj.size());
+            for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+                map.put(entry.getKey(), extractValue(entry.getValue()));
+            }
+            return map;
         }
         if (value.isJsonArray()) {
             List<Object> list = new ArrayList<>();

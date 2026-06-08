@@ -493,16 +493,20 @@ public class PlanDashboardServer {
                     m.addProperty("count", e.getValue());
                     return m;
                 }).toList()));
-            // Flatten all loaded templates into one world-space block list so
-            // the dashboard can render the structure in 3D immediately on connect.
+            // Flatten all placed modules into one world-space block list so
+            // the dashboard can render the structure in 3D immediately on
+            // connect. World coordinates go through ModuleTransform.apply
+            // — the same helper PlanBuildAction.placeNextBlock uses — so
+            // the preview and the placed world cannot diverge.
             java.util.List<JsonObject> flat = new java.util.ArrayList<>();
-            for (var tpl : p.templates) {
-                net.minecraft.core.BlockPos o2 = tpl.origin != null ? tpl.origin : net.minecraft.core.BlockPos.ZERO;
-                for (var tb : tpl.blocks) {
+            for (var pm : p.placedModules) {
+                for (var tb : pm.template.blocks) {
+                    net.minecraft.core.BlockPos worldPos = com.steve.ai.structure.ModuleTransform.apply(
+                        tb.relativePos, pm.worldOrigin, pm.facing);
                     JsonObject b = new JsonObject();
-                    b.addProperty("x", o2.getX() + tb.relativePos.getX());
-                    b.addProperty("y", o2.getY() + tb.relativePos.getY());
-                    b.addProperty("z", o2.getZ() + tb.relativePos.getZ());
+                    b.addProperty("x", worldPos.getX());
+                    b.addProperty("y", worldPos.getY());
+                    b.addProperty("z", worldPos.getZ());
                     b.addProperty("blockId", tb.blockState.getBlock().builtInRegistryHolder()
                         .key().location().toString());
                     flat.add(b);

@@ -11,7 +11,7 @@
 ## 核心组件
 
 - `llm/TaskPlanner.java` - LLM 调用编排（暴露 `getAsyncClient()` 和 `buildReActParams()`）
-- `llm/PromptBuilder.java` - 构建提示词（`buildSystemPrompt` / `buildUserPrompt` / `buildReActSystemPrompt` / `buildReActUserPrompt`）
+- `llm/PromptBuilder.java` - 构建提示词（`buildReActSystemPrompt` / `buildReActUserPrompt` / `buildPlanPrompt`）
 - `llm/ResponseParser.java` - 解析 LLM 响应（`parseAIResponse` 旧 + `parseReActStep` 新）
 - `llm/OpenAIClient.java`, `GroqClient.java`, `GeminiClient.java` - 同步客户端
 - `llm/async/AsyncOpenAIClient.java`, `AsyncGroqClient.java`, `AsyncGeminiClient.java` - 异步客户端（Java HttpClient）

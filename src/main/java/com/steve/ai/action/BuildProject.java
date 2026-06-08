@@ -2,7 +2,7 @@ package com.steve.ai.action;
 
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.llm.react.BuildPhase;
-import com.steve.ai.structure.StructureTemplateLoader;
+import com.steve.ai.structure.PlacedModule;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
@@ -19,6 +19,16 @@ import java.util.UUID;
  *
  * <p>One project is created per intercepted "build" task. It moves through
  * {@link BuildPhase} transitions, with each phase's outputs persisted to mempalace.</p>
+ *
+ * <p>The module-composition refactor replaced the legacy
+ * {@code List<LoadedTemplate> templates} with
+ * {@link #placedModules}: each entry is a {@link PlacedModule} that
+ * carries the loaded template <em>and</em> its world origin and facing.
+ * Three downstream consumers (CONSTRUCTION block placement, dashboard
+ * 3D snapshot, design-ready event payload) iterate this list and
+ * compute world coordinates through
+ * {@code ModuleTransform.apply(...)} — so the 3D preview and the placed
+ * world cannot diverge.</p>
  */
 public class BuildProject {
 
@@ -27,9 +37,16 @@ public class BuildProject {
     public final String command;
     public final long createdAtMs;
 
+    /** Names of the modules the LLM selected, in chain order. Survives even
+     *  if a template fails to load — used in mempalace archives. */
     public final List<String> selectedTemplates = new ArrayList<>();
-    public final List<StructureTemplateLoader.LoadedTemplate> templates = new ArrayList<>();
-    public int currentTemplateIndex = 0;
+
+    /** Resolved module placements: each entry pairs a loaded NBT template
+     *  with its world origin and Y-rotation. The CONSTRUCTION phase and the
+     *  dashboard snapshot both iterate this list. */
+    public final List<PlacedModule> placedModules = new ArrayList<>();
+
+    public int currentModuleIndex = 0;
     public BlockPos originPos;
     public final Map<Block, Integer> materials = new LinkedHashMap<>();
 
@@ -40,8 +57,9 @@ public class BuildProject {
     public int totalBlocks;
 
     /** Next world-space block index to place during CONSTRUCTION. Walks the
-     *  same flattened order used by the dashboard snapshot (templates in
-     *  project.templates order, blocks in LoadedTemplate.blocks order). */
+     *  same flattened order used by the dashboard snapshot (placedModules
+     *  in project.placedModules order, blocks in PlacedModule.template.blocks
+     *  order). */
     public int nextBlockIndex;
 
     public long phaseDeadlineMs;

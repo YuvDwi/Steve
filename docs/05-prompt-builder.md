@@ -8,8 +8,6 @@ PromptBuilder 是 Steve AI 的提示词工程核心，负责构建发送给 LLM 
 
 ```
 PromptBuilder
-├── buildSystemPrompt()                 # Plan-and-Execute 旧系统提示词 (保留)
-├── buildUserPrompt(steve, cmd, world)  # Plan-and-Execute 旧用户提示词
 ├── buildReActSystemPrompt(maxSteps)    # ReAct 系统提示词（输出 Thought/Action/FinalAnswer）
 └── buildReActUserPrompt(steve, cmd, scratchpad)  # ReAct 用户提示词（带历史）
 ```

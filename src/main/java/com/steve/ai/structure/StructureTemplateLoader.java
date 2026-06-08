@@ -166,6 +166,18 @@ public class StructureTemplateLoader {
     }
 
     /**
+     * Derive the {@code type} prefix from a template name. The first {@code _}
+     * separates type from the rest; templates without a {@code _} are bucketed
+     * as {@code "default"}. Matches the registration scheme used when seeding
+     * mempalace drawers (wing = {@code structure_<type>}).
+     */
+    public static String deriveType(String templateName) {
+        if (templateName == null) return null;
+        String[] parts = templateName.split("_", 2);
+        return parts.length > 1 ? parts[0] : "default";
+    }
+
+    /**
      * Get list of available structure templates from both classpath and file system
      */
     public static List<String> getAvailableStructures() {
@@ -178,8 +190,7 @@ public class StructureTemplateLoader {
                 for (File file : files) {
                     String name = file.getName().replace(".nbt", "");
                     structures.add(name);
-                    String[] parts = name.split("_", 2);
-                    String type = parts.length > 1 ? parts[0] : "default";
+                    String type = deriveType(name);
                     registerStructureToMempalace(file, name, type);
                 }
             }
@@ -187,6 +198,32 @@ public class StructureTemplateLoader {
 
         SteveMod.LOGGER.info("Available NBT structures: {}", structures);
         return structures;
+    }
+
+    /** Return the {@code type} for a registered template, or {@code null} if
+     *  the name is not in {@link #getAvailableStructures()}. */
+    public static String getTypeFor(String templateName) {
+        if (templateName == null) return null;
+        List<String> all = getAvailableStructures();
+        if (!all.contains(templateName)) return null;
+        return deriveType(templateName);
+    }
+
+    /** Return all registered templates that share {@code templateName}'s
+     *  {@code type} (including {@code templateName} itself), in directory-scan
+     *  order. Returns {@code null} if the name is not registered. */
+    public static List<String> getSiblingStructuresOfSameType(String templateName) {
+        if (templateName == null) return null;
+        List<String> all = getAvailableStructures();
+        if (!all.contains(templateName)) return null;
+        String type = deriveType(templateName);
+        List<String> siblings = new ArrayList<>();
+        for (String name : all) {
+            if (type.equals(deriveType(name))) {
+                siblings.add(name);
+            }
+        }
+        return siblings;
     }
 
     /**

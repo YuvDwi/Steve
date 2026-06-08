@@ -8,6 +8,7 @@ import com.steve.ai.event.EventBus;
 import com.steve.ai.event.SimpleEventBus;
 import com.steve.ai.event.plan.PlanChatEvent;
 import com.steve.ai.execution.*;
+import com.steve.ai.llm.PromptBuilder;
 import com.steve.ai.llm.ResponseParser;
 import com.steve.ai.llm.TaskPlanner;
 import com.steve.ai.config.SteveConfig;
@@ -407,13 +408,8 @@ public class ActionExecutor {
      */
     public void startPlannedBuild(String description) {
         SteveMod.LOGGER.info("Steve '{}' planning: {}", steve.getSteveName(), description);
-        String augmented = "[PLAN MODE] Player wants a plan, NOT immediate execution. "
-            + "You MUST respond by emitting action=build with the most fitting NBT template(s) "
-            + "from the available list. For composite builds (e.g. a village or courtyard), "
-            + "emit parameters: {\"structures\": [\"<name1>\", \"<name2>\", ...]} — at most "
-            + SteveConfig.MAX_TEMPLATES_PER_PLAN.get() + " templates. "
-            + "Do NOT gather/mine/craft/pathfind first — the player will /steve approve before "
-            + "any blocks are placed. Player's request: " + description;
+        int cap = SteveConfig.MAX_TEMPLATES_PER_PLAN.get();
+        String augmented = PromptBuilder.buildPlanPrompt(description, cap);
         pendingCommands.add(augmented);
         if (reactAgent == null && currentAction == null) {
             sendToGUI(steve.getSteveName(), "Planning: " + description);
