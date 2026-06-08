@@ -57,13 +57,6 @@ public class PromptBuilder {
         return formatInventory(steve);
     }
 
-    private static String getWarehouseStatus(SteveEntity steve) {
-        if (steve.getWarehousePos() != null) {
-            return formatPosition(steve.getWarehousePos());
-        }
-        return "[none]";
-    }
-
     private static String formatPosition(BlockPos pos) {
         return String.format("[%d, %d, %d]", pos.getX(), pos.getY(), pos.getZ());
     }
@@ -176,7 +169,6 @@ public class PromptBuilder {
             Nearby Blocks: %s
             Inventory: %s
             Biome: %s
-            Warehouse: %s
 
             === USER COMMAND ===
             "%s"
@@ -192,7 +184,6 @@ public class PromptBuilder {
                 new WorldKnowledge(steve).getNearbyBlocksSummary(),
                 getInventoryStatus(steve),
                 new WorldKnowledge(steve).getBiomeName(),
-                getWarehouseStatus(steve),
                 command,
                 scratchpad.isEmpty() ? "(no steps taken yet)" : scratchpad
             );

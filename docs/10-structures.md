@@ -76,8 +76,4 @@ build castle with width 20 height 15 depth 20
 - LLM prompt 会动态读取目录下的模板名列表（`StructureTemplateLoader.getAvailableStructures()`），供 AI 识别
 - 启动时 `StructureTemplateLoader` 扫描该目录并注册到 mempalace（`wing=structure_{type}, room={name}`），LLM 通过 `mempalace_list_drawers` 发现
 
-## 材料仓库
-
-建造时如果材料不足，Steve 会自动去最近的仓库箱子取材料，取完返回继续建造。仓库箱子内的材料会自动补满（配置的目标数量）。
-
-仓库通过 `config/steve/warehouses.json` 配置，详见 [配置参考 - 材料仓库](03-config.md#材料仓库配置)。
+	

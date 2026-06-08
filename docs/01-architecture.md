@@ -19,8 +19,7 @@ src/main/java/com/steve/ai/
 ├── command/                   # Minecraft 命令
 │   └── SteveCommands.java     # /steve spawn/tell/plan/approve/halt/status/dashboard 等
 ├── config/                     # 配置处理
-│   ├── SteveConfig.java       # ForgeConfigSpec, 含 [mcp]/[react]/[dashboard] 段
-│   └── WarehouseConfig.java   # 仓库 JSON 加载
+│   ├── SteveConfig.java       # ForgeConfigSpec, 含 [mcp]/[react]/[dashboard] 段　　　　
 ├── dashboard/                  # 外部 plan UI HTTP server
 │   ├── PlanDashboardServer.java  # 127.0.0.1:8765, /events + /command + /chat + /plan
 │   └── PlanEventJson.java     # PlanEvent → JSON 序列化
@@ -163,5 +162,5 @@ ReAct 主循环位于 `com.steve.ai.llm.react.ReActAgent`。状态机：
 - 建造完成后写回 `wing=built_structures` 记录位置
 - `SteveMemory` 通过 `mempalace:mempalace_list_drawers` 查询长期记忆，不再用 NBT 持久化
 
-### 8. 仓库系统
-`config/steve/warehouses.json` 定义仓库（`name` + `spawn=fixed|near_player` + `materials`），由 `WarehouseConfig.load()` 加载，`WarehouseManager.init(level)` 初始化。建造缺材料时 `WarehouseRefillHandler` 自动去最近仓库补给。
+
+	

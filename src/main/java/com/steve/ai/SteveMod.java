@@ -6,11 +6,9 @@ import com.steve.ai.config.SteveConfig;
 import com.steve.ai.dashboard.PlanDashboardServer;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
-import com.steve.ai.config.WarehouseConfig;
 import com.steve.ai.event.EventBus;
 import com.steve.ai.event.SimpleEventBus;
 import com.steve.ai.event.plan.PlanEvent;
-import com.steve.ai.memory.WarehouseManager;
 import com.steve.ai.mcp.MCPToolRegistry;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -84,8 +82,6 @@ public class SteveMod {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        WarehouseConfig.load();
-        WarehouseManager.init(event.getServer().overworld());
         MCPToolRegistry.init();
         server = event.getServer();
     }
@@ -109,13 +105,6 @@ public class SteveMod {
      *  thread before touching {@link SteveEntity} state. */
     public static net.minecraft.server.MinecraftServer getServer() {
         return server;
-    }
-
-    @SubscribeEvent
-    public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            WarehouseManager.onPlayerJoined(serverLevel, event.getEntity());
-        }
     }
 
     public static SteveManager getSteveManager() {
