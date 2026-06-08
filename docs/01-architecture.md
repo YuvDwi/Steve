@@ -8,21 +8,35 @@ src/main/java/com/steve/ai/
 ├── action/                    # 动作执行系统
 │   ├── ActionExecutor.java    # ReAct 调度器（命令排队 + 步骤分发）
 │   ├── CollaborativeBuildManager.java  # 多 Agent 协调
+│   ├── BuildProject.java      # 四阶段 plan-then-build 项目数据模型
 │   ├── Task.java              # 动作任务数据模型
 │   ├── ActionResult.java
 │   └── actions/               # 独立动作实现 (含 MCPAction)
+│       └── PlanBuildAction.java # 四阶段 plan 模式状态机 (FEASIBILITY → DESIGN → ... → COMPLETED)
 ├── client/                    # 客户端 GUI
 │   ├── SteveGUI.java          # 滑出式面板 GUI (按 K 打开)
 │   └── KeyBindings.java
 ├── command/                   # Minecraft 命令
-│   └── SteveCommands.java     # /steve spawn, /steve tell 等
+│   └── SteveCommands.java     # /steve spawn/tell/plan/approve/halt/status/dashboard 等
 ├── config/                     # 配置处理
-│   ├── SteveConfig.java       # ForgeConfigSpec, 含 [mcp]/[react] 段
-│   └── WarehouseConfig.java   # 仓库 JSON 加载
+│   ├── SteveConfig.java       # ForgeConfigSpec, 含 [mcp]/[react]/[dashboard] 段　　　　
+├── dashboard/                  # 外部 plan UI HTTP server
+│   ├── PlanDashboardServer.java  # 127.0.0.1:8765, /events + /command + /chat + /plan
+│   └── PlanEventJson.java     # PlanEvent → JSON 序列化
 ├── entity/                     # Minecraft 实体类
 │   ├── SteveEntity.java       # 自定义实体 (PathfinderMob)
 │   └── SteveManager.java      # 管理所有活跃的 Steves
 ├── event/                      # 事件总线系统
+│   ├── EventBus.java, SimpleEventBus.java
+│   └── plan/                  # PlanEvent 标记接口 + 7 个事件 POJO
+│       ├── PlanEvent.java
+│       ├── PlanCreatedEvent.java
+│       ├── PlanDesignReadyEvent.java
+│       ├── PlanPhaseChangedEvent.java
+│       ├── PlanApprovedEvent.java
+│       ├── PlanHaltedEvent.java
+│       ├── PlanLogEvent.java
+│       └── PlanChatEvent.java
 ├── execution/                  # 状态机、拦截器
 │   ├── AgentStateMachine.java
 │   ├── ActionContext.java
@@ -33,7 +47,10 @@ src/main/java/com/steve/ai/
 │   ├── ResponseParser.java    # 解析 LLM 响应 (含 parseReActStep)
 │   ├── OpenAIClient.java, GroqClient.java, GeminiClient.java
 │   ├── async/                 # 异步非阻塞客户端 (AsyncOpenAIClient 等)
-│   ├── react/ReActAgent.java  # ReAct (Reason + Act) 主循环
+│   ├── react/                 # ReAct 主循环 + plan 模式辅助
+│   │   ├── ReActAgent.java        # ReAct (Reason + Act) 主循环
+│   │   ├── BuildPhase.java        # FEASIBILITY/DESIGN/.../COMPLETED 枚举
+│   │   └── BuildDesignFormatter.java  # BuildProject → 聊天栏设计书文本
 │   └── resilience/            # 熔断器、重试、限流
 ├── mcp/                        # MCP (Model Context Protocol) 集成
 │   ├── MCPToolRegistry.java   # 多 MCP server 单例注册中心
@@ -43,10 +60,14 @@ src/main/java/com/steve/ai/
 │   ├── SteveMemory.java       # 短期动作历史 + mempalace 长期记忆查询
 │   └── WorldKnowledge.java    # 世界状态追踪
 ├── plugin/                     # 插件架构
-│   └── ActionRegistry.java    # 动态动作工厂
+│   ├── ActionRegistry.java    # 动态动作工厂
+│   ├── ActionFactory.java, ActionPlugin.java
+│   ├── CoreActionsPlugin.java # 8 个基础动作注册 (pathfind/mine/gather/place/build/craft/attack/follow)
+│   └── PluginManager.java
 ├── structure/                  # 建筑生成 + 模板管理
 │   ├── StructureTemplateLoader.java  # 扫描 NBT + 注册到 mempalace
-│   └── StructureGenerators.java
+│   ├── StructureRegistry.java        # 模板索引
+│   └── BlockPlacement.java
 └── util/                       # 通用工具
 ```
 
@@ -118,9 +139,10 @@ ReAct 主循环位于 `com.steve.ai.llm.react.ReActAgent`。状态机：
 ```
 [ReAct step N] sendAsync(prompt + scratchpad)
   → parseReActStep(LLM response)
-    ├─ is_final=true   → 标记 finished, finalAnswer
-    ├─ tasks.size()==1 → 设 pendingStep, 等 game thread feedObservation
-    └─ 解析失败/无 action → 把错误喂回 scratchpad, 继续下一轮
+    ├─ is_final=true                          → 标记 finished, finalAnswer
+    ├─ is_final=true and tasks.size()==1      → 先派发 task, 等 observation 落地后再 finish (FINAL-with-task 延迟)
+    ├─ tasks.size()==1 and !is_final          → 设 pendingStep, 等 game thread feedObservation
+    └─ 解析失败/无 action                     → 把错误喂回 scratchpad, 继续下一轮
 [game tick]
   reactAgent.consumeNextStep() → executeTask(task) → BaseAction
   BaseAction.isComplete() → reactAgent.feedObservation(ActionResult) → 触发下一轮
@@ -140,5 +162,5 @@ ReAct 主循环位于 `com.steve.ai.llm.react.ReActAgent`。状态机：
 - 建造完成后写回 `wing=built_structures` 记录位置
 - `SteveMemory` 通过 `mempalace:mempalace_list_drawers` 查询长期记忆，不再用 NBT 持久化
 
-### 8. 仓库系统
-`config/steve/warehouses.json` 定义仓库（`name` + `spawn=fixed|near_player` + `materials`），由 `WarehouseConfig.load()` 加载，`WarehouseManager.init(level)` 初始化。建造缺材料时 `WarehouseRefillHandler` 自动去最近仓库补给。
+
+	

@@ -43,13 +43,19 @@ public class StructureTemplateLoader {
         public final int width;
         public final int height;
         public final int depth;
+        public final BlockPos origin;
 
         public LoadedTemplate(String name, List<TemplateBlock> blocks, int width, int height, int depth) {
+            this(name, blocks, width, height, depth, null);
+        }
+
+        public LoadedTemplate(String name, List<TemplateBlock> blocks, int width, int height, int depth, BlockPos origin) {
             this.name = name;
             this.blocks = blocks;
             this.width = width;
             this.height = height;
             this.depth = depth;
+            this.origin = origin;
         }
     }
 
@@ -160,6 +166,18 @@ public class StructureTemplateLoader {
     }
 
     /**
+     * Derive the {@code type} prefix from a template name. The first {@code _}
+     * separates type from the rest; templates without a {@code _} are bucketed
+     * as {@code "default"}. Matches the registration scheme used when seeding
+     * mempalace drawers (wing = {@code structure_<type>}).
+     */
+    public static String deriveType(String templateName) {
+        if (templateName == null) return null;
+        String[] parts = templateName.split("_", 2);
+        return parts.length > 1 ? parts[0] : "default";
+    }
+
+    /**
      * Get list of available structure templates from both classpath and file system
      */
     public static List<String> getAvailableStructures() {
@@ -172,8 +190,7 @@ public class StructureTemplateLoader {
                 for (File file : files) {
                     String name = file.getName().replace(".nbt", "");
                     structures.add(name);
-                    String[] parts = name.split("_", 2);
-                    String type = parts.length > 1 ? parts[0] : "default";
+                    String type = deriveType(name);
                     registerStructureToMempalace(file, name, type);
                 }
             }
@@ -181,6 +198,32 @@ public class StructureTemplateLoader {
 
         SteveMod.LOGGER.info("Available NBT structures: {}", structures);
         return structures;
+    }
+
+    /** Return the {@code type} for a registered template, or {@code null} if
+     *  the name is not in {@link #getAvailableStructures()}. */
+    public static String getTypeFor(String templateName) {
+        if (templateName == null) return null;
+        List<String> all = getAvailableStructures();
+        if (!all.contains(templateName)) return null;
+        return deriveType(templateName);
+    }
+
+    /** Return all registered templates that share {@code templateName}'s
+     *  {@code type} (including {@code templateName} itself), in directory-scan
+     *  order. Returns {@code null} if the name is not registered. */
+    public static List<String> getSiblingStructuresOfSameType(String templateName) {
+        if (templateName == null) return null;
+        List<String> all = getAvailableStructures();
+        if (!all.contains(templateName)) return null;
+        String type = deriveType(templateName);
+        List<String> siblings = new ArrayList<>();
+        for (String name : all) {
+            if (type.equals(deriveType(name))) {
+                siblings.add(name);
+            }
+        }
+        return siblings;
     }
 
     /**
@@ -191,8 +234,22 @@ public class StructureTemplateLoader {
             LoadedTemplate template = loadFromFile(file, name);
             if (template == null) return;
 
-            MCPClientWrapper client = new MCPClientWrapper("mempalace", "http://localhost:6060");
+            // Resolve the mempalace URL from SteveConfig.MCP_SERVERS rather than
+            // hardcoding localhost. If the server isn't configured, skip the
+            // registration quietly — NBT files can still be built without it.
+            String mempalaceUrl = com.steve.ai.mcp.MCPToolRegistry.getServerUrl("mempalace");
+            if (mempalaceUrl == null) {
+                SteveMod.LOGGER.debug("mempalace not configured; skipping registration of '{}'", template.name);
+                return;
+            }
+
+            MCPClientWrapper client = new MCPClientWrapper("mempalace", mempalaceUrl);
             client.initialize();
+            if (!client.isInitialized()) {
+                SteveMod.LOGGER.warn("MCP client for '{}' did not initialize; skipping mempalace registration",
+                    mempalaceUrl);
+                return;
+            }
 
             String content = String.format("Type: %s | Structure '%s' %dx%dx%d with %d blocks",
                 type, template.name, template.width, template.height, template.depth, template.blocks.size());

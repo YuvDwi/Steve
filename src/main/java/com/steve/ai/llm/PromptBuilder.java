@@ -1,9 +1,7 @@
 package com.steve.ai.llm;
 
-import com.steve.ai.SteveMod;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
-import com.steve.ai.memory.SteveMemory;
 import com.steve.ai.memory.WorldKnowledge;
 import com.steve.ai.mcp.MCPToolConverter;
 import com.steve.ai.mcp.MCPToolRegistry;
@@ -17,58 +15,6 @@ import java.util.List;
 import java.util.Map;
 
 public class PromptBuilder {
-    
-    public static String buildSystemPrompt() {
-        return """
-            You are a Minecraft AI agent. Respond ONLY with valid JSON, no extra text.
-
-            FORMAT (strict JSON):
-            {"reasoning": "brief thought", "plan": "action description", "tasks": [{"action": "type", "parameters": {...}}]}
-
-            ACTIONS:
-            - attack: {"target": "hostile"} (for any mob/monster)
-            - build: {"structure": "house"} (NBT template, auto-sized)
-            - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
-            - follow: {"player": "NAME"}
-            - pathfind: {"x": 0, "y": 0, "z": 0}
-
-            RULES:
-            1. ALWAYS use "hostile" for attack target (mobs, monsters, creatures)
-            2. NBT TEMPLATES: %s
-            3. NO extra pathfind tasks unless explicitly requested
-            4. Keep reasoning under 15 words
-            5. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
-            6. MINING: Can mine any ore (iron, diamond, coal, etc)
-            7. WAREHOUSE: Material warehouse provides building materials automatically. Steve goes to warehouse when running low.
-            8. MCP TOOLS: Use "mcp" action to call external tools: {"action": "mcp", "parameters": {"tool": "serverName:toolName", "args": {...}}}
-            %s
-
-            EXAMPLES (copy these formats exactly):
-
-            Input: "build a house"
-            {"reasoning": "Building house from NBT template", "plan": "Construct house", "tasks": [{"action": "build", "parameters": {"structure": "house"}}]}
-
-            Input: "get me iron"
-            {"reasoning": "Mining iron ore for player", "plan": "Mine iron", "tasks": [{"action": "mine", "parameters": {"block": "iron", "quantity": 16}}]}
-
-            Input: "find diamonds"
-            {"reasoning": "Searching for diamond ore", "plan": "Mine diamonds", "tasks": [{"action": "mine", "parameters": {"block": "diamond", "quantity": 8}}]}
-
-            Input: "kill mobs"
-            {"reasoning": "Hunting hostile creatures", "plan": "Attack hostiles", "tasks": [{"action": "attack", "parameters": {"target": "hostile"}}]}
-
-            Input: "murder creeper"
-            {"reasoning": "Targeting creeper", "plan": "Attack creeper", "tasks": [{"action": "attack", "parameters": {"target": "creeper"}}]}
-
-            Input: "follow me"
-            {"reasoning": "Player needs me", "plan": "Follow player", "tasks": [{"action": "follow", "parameters": {"player": "USE_NEARBY_PLAYER_NAME"}}]}
-
-            CRITICAL: Output ONLY valid JSON. No markdown, no explanations, no line breaks in JSON.
-
-            AVAILABLE MCP TOOLS:
-            %s
-            """.formatted(getAvailableTemplates(), getMaterialRule(), getMcpToolsPrompt());
-    }
 
     private static String getAvailableTemplates() {
         List<String> templates = StructureTemplateLoader.getAvailableStructures();
@@ -104,48 +50,11 @@ public class PromptBuilder {
         }
     }
 
-    public static String buildUserPrompt(SteveEntity steve, String command, WorldKnowledge worldKnowledge) {
-        String inventory = getInventoryStatus(steve);
-        String warehouse = getWarehouseStatus(steve);
-
-        return """
-            === YOUR SITUATION ===
-            Position: %s
-            Nearby Players: %s
-            Nearby Entities: %s
-            Nearby Blocks: %s
-            Inventory: %s
-            Biome: %s
-            Warehouse: %s
-
-            === PLAYER COMMAND ===
-            "%s"
-
-            === YOUR RESPONSE (with reasoning) ===
-            """.formatted(
-                formatPosition(steve.blockPosition()),
-                worldKnowledge.getNearbyPlayerNames(),
-                worldKnowledge.getNearbyEntitiesSummary(),
-                worldKnowledge.getNearbyBlocksSummary(),
-                inventory,
-                worldKnowledge.getBiomeName(),
-                warehouse,
-                command
-            );
-    }
-
     private static String getInventoryStatus(SteveEntity steve) {
         if (SteveConfig.CREATIVE_MODE.get()) {
             return "[unlimited - creative mode]";
         }
         return formatInventory(steve);
-    }
-
-    private static String getWarehouseStatus(SteveEntity steve) {
-        if (steve.getWarehousePos() != null) {
-            return formatPosition(steve.getWarehousePos());
-        }
-        return "[none]";
     }
 
     private static String formatPosition(BlockPos pos) {
@@ -178,64 +87,75 @@ public class PromptBuilder {
 
     public static String buildReActSystemPrompt(int maxSteps) {
         return """
-            You are a Minecraft AI agent operating in ReAct (Reason + Act) mode.
-            You decide ONE action per turn. After each action, you will receive an Observation
-            describing the result. Use the observation to decide your next step.
-            You may take up to %d steps to complete the user's command.
+            你是 Minecraft AI 智能体,正在以 ReAct (推理 + 行动) 模式工作。
+            你每回合只决定一个 action。执行后你会收到一段 Observation 描述结果,请根据 Observation 决定下一步。
+            你最多可用 %d 步完成玩家指令。
 
-            OUTPUT FORMAT (strict JSON, one object only):
-            {"thought": "what you are thinking and why you choose this action",
+            输出格式(严格 JSON,只输出一个对象):
+            {"thought": "你在想什么、为什么选这个 action",
              "action": "<action_name>",
-             "parameters": {<action parameters>},
+             "parameters": {<action 参数>},
              "is_final": false}
 
-            When the command is fully accomplished (or you determine it cannot be done), output:
-            {"thought": "summary of what was accomplished",
+            当任务完全完成(或你确定无法完成)时,输出:
+            {"thought": "总结已完成的成果",
              "is_final": true,
-             "final_answer": "a brief, friendly sentence to tell the user (use their language if obvious)"}
+             "final_answer": "一句简短友好的中文回复给玩家"}
 
-            ACTIONS (use these exact names):
-            - attack: {"target": "hostile|mob_name"} (for any mob/monster/creature)
-            - build: {"structure": "<template_name>"} (NBT template, auto-sized)
-            - mine: {"block": "<resource>", "quantity": <int>} (resources: iron, diamond, coal, gold, copper, redstone, emerald, etc)
-            - follow: {"player": "<player_name>"}
+            动作列表(用以下英文 key,大小写敏感):
+            - attack: {"target": "hostile|生物名"} (攻击任何敌对生物/怪物)
+            - build: {"structure": "<模板名>"} (单个 NBT,自动算尺寸) —— 或 {"structures": [{"name":"<n>","dx":<int>,"dy":<int>,"dz":<int>,"facing":"N|E|S|W"}]} 模块拼装协议 (dx/dy/dz 是相对上一块出口的偏移,在上一块的局部坐标系下表达;facing 默认 S)。长线状结构(铁轨、高速、长城、运河)优先用模块拼装形式,这样每段能旋转拼出折线。
+              组合规则:非平凡结构 ≥3 entry,简单结构 ≥2 entry;玩家明确要单个 piece 时 (如 "放 房子_1") 才允许单 entry。
+            - mine: {"block": "<资源名>", "quantity": <int>} (资源: iron, diamond, coal, gold, copper, redstone, emerald 等)
+            - follow: {"player": "<玩家名>"}
             - pathfind: {"x": <int>, "y": <int>, "z": <int>}
-            - gather: {"resource": "<resource>", "quantity": <int>}
-            - craft: {"item": "<item>", "quantity": <int>}
-            - mcp: {"tool": "<serverName:toolName>", "args": {<args>}} (call an MCP tool)
+            - gather: {"resource": "<资源名>", "quantity": <int>}
+            - craft: {"item": "<物品>", "quantity": <int>}
+            - mcp: {"tool": "<serverName:toolName>", "args": {<args>}} (调用 MCP 工具)
 
-            RULES:
-            1. ALWAYS use "hostile" for attack target unless the player named a specific mob
-            2. NBT TEMPLATES available: %s
-            3. NO pathfind task unless explicitly needed (build/mine auto-navigate)
-            4. Keep "thought" under 30 words
-            5. COLLABORATIVE BUILDING: multiple Steves can work on the same structure
+            规则:
+            1. 攻击目标统一用 "hostile",除非玩家明确指定了具体生物名
+            2. 可用 NBT 模板: %s
+            3. 除非明确需要否则不要发 pathfind 任务(build/mine 会自动寻路)
+            4. "thought" 字段保持在 30 字以内
+            5. 协同建造:多个 Steve 可以同时做同一个结构
             6. %s
-            7. MCP TOOLS: use action="mcp" with parameters.tool = "serverName:toolName"
-            8. If a tool call fails or the action is wrong, the Observation will tell you — adjust and try again, or use is_final:true with an explanation
-            9. To stop, set is_final:true. Do NOT repeat the same failing action twice.
-            10. Output ONLY valid JSON. No markdown, no prose, no line breaks inside JSON.
+            7. MCP 工具调用:用 action="mcp",parameters.tool = "serverName:toolName"
+            8. 计划模式 (action=build 时): 任何非平凡结构都必须用模块拼装形式,parameters.structures 数组至少 2 个 entry (典型 3+);玩家明确说 "放 X" 的单 piece 例外 —— 此规则与 plan-mode 用户消息中的规则是同一约束。
+            9. 工具调用失败或 action 选错时,Observation 会告诉你 —— 调整重试,或者用 is_final:true 给出说明
+            10. 终止时设 is_final:true,同一个失败的 action 不要重复发两次
+            11. 只输出合法 JSON,不要 markdown、不要散文、JSON 里不要换行
 
-            EXAMPLES:
+            示例:
 
-            Step 1 (need information):
-            {"thought": "I should check what build templates are available before choosing one",
+            步骤 1 (需要先查信息):
+            {"thought": "我先查一下有哪些 build 模板可用",
              "action": "mcp",
              "parameters": {"tool": "mempalace:mempalace_list_drawers", "args": {"wing": "structure_template"}},
              "is_final": false}
 
-            Step 2 (after receiving template list, build):
-            {"thought": "house is available, will build it",
+            步骤 2 (拿到模板后建):
+            {"thought": "house 可用,直接建",
              "action": "build",
              "parameters": {"structure": "house"},
              "is_final": false}
 
-            Final step:
-            {"thought": "House built successfully at the target position",
-             "is_final": true,
-             "final_answer": "Built a house at [100, 64, -200]"}
+            步骤 2b (组合建造 —— 村庄 3 个 module):
+            {"thought": "村庄需要 房子_1 + 井 + 围栏,都有,直接拼",
+             "action": "build",
+             "parameters": {"structures": [
+               {"name": "房子_1"},
+               {"name": "井", "dx": 0, "dy": 0, "dz": 0, "facing": "S"},
+               {"name": "围栏", "dx": 0, "dy": 0, "dz": 0, "facing": "S"}
+             ]},
+             "is_final": false}
 
-            AVAILABLE MCP TOOLS:
+            收尾步骤:
+            {"thought": "房子在目标位置建好了",
+             "is_final": true,
+             "final_answer": "已在 [100, 64, -200] 位置建好房子"}
+
+            可用 MCP 工具:
             %s
             """.formatted(maxSteps, getAvailableTemplates(), getMaterialRule(), getMcpToolsPrompt());
     }
@@ -249,7 +169,6 @@ public class PromptBuilder {
             Nearby Blocks: %s
             Inventory: %s
             Biome: %s
-            Warehouse: %s
 
             === USER COMMAND ===
             "%s"
@@ -265,10 +184,41 @@ public class PromptBuilder {
                 new WorldKnowledge(steve).getNearbyBlocksSummary(),
                 getInventoryStatus(steve),
                 new WorldKnowledge(steve).getBiomeName(),
-                getWarehouseStatus(steve),
                 command,
                 scratchpad.isEmpty() ? "(no steps taken yet)" : scratchpad
             );
     }
-}
 
+    /**
+     * Build the plan-mode user-prompt prefix that the LLM sees in
+     * {@code === USER COMMAND ===}. The constraint text must travel with the
+     * command (ReActAgent.runStep embeds the original command raw on every
+     * turn), so this string is prepended to the player's free-form description.
+     *
+     * <p>Used by {@code ActionExecutor.startPlannedBuild} and surfaced via
+     * {@code /steve plan &lt;description&gt;}.</p>
+     *
+     * @param description player's free-form request, e.g. {@code "build a castle"}
+     * @param maxEntries cap on the number of {@code structures[]} entries
+     *                   (from {@code SteveConfig.MAX_TEMPLATES_PER_PLAN})
+     * @return the full prompt string ready to be queued for the ReAct agent
+     */
+    public static String buildPlanPrompt(String description, int maxEntries) {
+        return "[PLAN MODE] Player wants a plan, NOT immediate execution. "
+            + "Do NOT gather/mine/craft/pathfind first — the player will /steve approve "
+            + "before any blocks are placed.\n\n"
+            + "可用 NBT 模板 (直接复用,不要重新查询): " + String.join(", ", StructureTemplateLoader.getAvailableStructures()) + "\n\n"
+            + "You MUST respond by emitting action=build with the module-composition form:\n"
+            + "  parameters: {\"structures\": [{\"name\": \"<template>\", \"facing\": \"N|E|S|W\"}, ...]}\n\n"
+            + "Rules:\n"
+            + "- 至少 2 entries (系统规则第 8 条同样要求);单元素数组会被拒绝 (除玩家显式 \"放 X\")。\n"
+            + "- Each entry's \"facing\" rotates the piece 90° about Y, so chained pieces turn corners — that is why a build needs multiple entries.\n"
+            + "- \"dx\"/\"dy\"/\"dz\" are optional offsets from the previous piece's exit point; default 0/0/0.\n"
+            + "- At most " + maxEntries + " entries (cap).\n"
+            + "- Do NOT use the legacy {\"structures\": [\"<name>\", ...]} string form — it is no longer supported.\n\n"
+            + "Concrete example for a house:\n"
+            + "  {\"structures\": [{\"name\": \"房子_主体\", \"facing\": \"S\"}, "
+            + "{\"name\": \"房子_屋顶\", \"dx\": 0, \"dy\": 6, \"facing\": \"S\"}]}\n\n"
+            + "Player's request: " + description;
+    }
+}

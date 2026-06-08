@@ -19,6 +19,11 @@
 | `/steve list` | 列出所有活跃的 Steves |
 | `/steve stop <name>` | 停止当前动作 |
 | `/steve tell <name> <command>` | 发送自然语言指令 |
+| `/steve plan <description>` | 进入 plan mode (LLM 选 NBT 模板、出设计书、等 approve) |
+| `/steve approve` | 批准当前设计，直接进入 CONSTRUCTION 阶段施工 |
+| `/steve halt [reason]` | 中止当前 build，已放置方块不撤回 |
+| `/steve status` | 输出当前 BuildProject 的所有阶段状态（debug） |
+| `/steve dashboard [/stop]` | 启动/停止外部 plan UI HTTP server (默认 127.0.0.1:8765) |
 
 ### 示例
 

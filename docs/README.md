@@ -26,7 +26,7 @@
 ### 数据层
 14. [记忆系统](09-memory.md) - 对话历史、世界状态
 15. [可用结构](10-structures.md) - Minecraft 结构参考
-16. [材料仓库](03-config.md#材料仓库配置) - 仓库配置、自动补给
+16. [NBT 建筑模板](03-config.md#nbt-建筑模板) - 模板配置
 
 ### 界面层
 16. [Steve GUI](11-steve-gui.md) - 侧边栏聊天界面实现
@@ -35,5 +35,6 @@
 
 黑客马拉松期间开发的施工系统相关文档：
 
-1. [施工无人工地](hackathon/01-construction-site.md) - 多工种施工系统设计
-2. [道路施工](hackathon/02-road-construction.md) - 道路建设系统设计
+1. [mempalace 集成](hackathon/01-mempalace-integration.md) - mempalace × ReAct 模板调度
+2. [四阶段 plan 模式](hackathon/02-plan-mode.md) - plan-then-build 状态机
+3. [外部 HTML Plan Dashboard](hackathon/施工流程.md) - HTTP server + React + Three.js UI

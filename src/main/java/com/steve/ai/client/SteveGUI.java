@@ -397,6 +397,20 @@ public class SteveGUI {
             return;
         }
 
+        // Pass-through: any input that targets the /steve root command itself
+        // (list, status, approve, halt, stop, remove, plan, etc.) must NOT be wrapped
+        // as "tell <firstSteve> <command>" — that would cause the LLM to receive
+        // the bare subcommand and hallucinate a final answer.
+        String trimmed = command.stripLeading();
+        String lower = trimmed.toLowerCase();
+        if (lower.startsWith("/steve") || lower.startsWith("steve ")) {
+            if (mc.player != null) {
+                String cmd = trimmed.startsWith("/") ? trimmed.substring(1) : trimmed;
+                mc.player.connection.sendCommand(cmd);
+            }
+            return;
+        }
+
         List<String> targetSteves = parseTargetSteves(command);
         
         if (targetSteves.isEmpty()) {

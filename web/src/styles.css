@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* ===== App-wide tokens & non-Tailwind bits ===== */
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  background: #0a0e15;
+  color: #fff;
+  overflow: hidden;
+}
+
+body {
+  background: radial-gradient(ellipse at top, #1c2734 0%, #0a0e15 60%, #000 100%);
+  background-size: cover;
+}
+
+/* Three.js canvas needs display:block + full size of its wrapper. */
+.canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+/* Slim scrollbar for chat log + timeline. */
+.chat-log::-webkit-scrollbar,
+.timeline::-webkit-scrollbar { width: 8px; }
+.chat-log::-webkit-scrollbar-thumb,
+.timeline::-webkit-scrollbar-thumb { background: #2a3344; border-radius: 4px; }
+.chat-log::-webkit-scrollbar-track,
+.timeline::-webkit-scrollbar-track { background: transparent; }

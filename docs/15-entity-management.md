@@ -262,23 +262,19 @@ private static List<String> parseTargetSteves(String command) {
 ### 与任务规划集成
 
 ```java
-// TaskPlanner.java
-public void processCommand(SteveEntity steve, String command) {
-    // 获取 Steve 名称
-    String steveName = steve.getSteveName();
+// ActionExecutor.java
+private void drainNextCommand() {
+    String next = commandQueue.poll();
+    if (next == null) return;
 
-    // 构建提示词
-    String prompt = PromptBuilder.buildUserPrompt(steve, command, worldKnowledge);
-
-    // 发送到 LLM
-    llmClient.sendAsync(prompt, params)
-        .thenAccept(response -> {
-            // 解析任务
-            List<Task> tasks = ResponseParser.parse(response);
-
-            // 分配给 Steve
-            steve.getActionExecutor().addTasks(tasks);
-        });
+    Map<String, Object> reactBaseParams = getTaskPlanner().buildReActParams();
+    reactAgent = new ReActAgent(steve, next,
+        SteveConfig.REACT_MAX_STEPS.get(),
+        SteveConfig.REACT_OBS_TRUNCATE.get(),
+        SteveConfig.REACT_FAIL_TOLERANCE.get());
+    reactAgent.startAsync(
+        getTaskPlanner().getAsyncClient(SteveConfig.AI_PROVIDER.get()),
+        reactBaseParams);
 }
 ```
 
