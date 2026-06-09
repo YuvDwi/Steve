@@ -10,7 +10,7 @@
 ### AI 核心
 4. [世界感知](04-world-knowledge.md) - 环境扫描与感知系统
 5. [提示词构建](05-prompt-builder.md) - LLM 提示词工程系统
-6. [LLM 集成](06-llm.md) - 提供商、缓存、熔断器
+6. [LLM 集成]**(06-llm.md)** - 提供商、缓存、熔断器
 7. [弹性系统](14-resilience.md) - LLM 调用容错机制
 
 ### 执行层
@@ -37,4 +37,4 @@
 
 1. [mempalace 集成](hackathon/01-mempalace-integration.md) - mempalace × ReAct 模板调度
 2. [四阶段 plan 模式](hackathon/02-plan-mode.md) - plan-then-build 状态机
-3. [外部 HTML Plan Dashboard](hackathon/施工流程.md) - HTTP server + React + Three.js UI
+3. [外部 HTML Plan Dashboard](knowledges/施工流程.md) - HTTP server + React + Three.js UI

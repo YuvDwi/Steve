@@ -2,8 +2,8 @@ package com.steve.ai.action.actions;
 
 import com.steve.ai.action.ActionResult;
 import com.steve.ai.action.Task;
-import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
+import com.steve.ai.util.BlockPlacer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -11,7 +11,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 
 public class PlaceBlockAction extends BaseAction {
     private Block blockToPlace;
@@ -51,33 +50,13 @@ public class PlaceBlockAction extends BaseAction {
             return;
         }
 
-        if (!steve.blockPosition().closerThan(targetPos, 5.0)) {
-            steve.getNavigation().moveTo(targetPos.getX(), targetPos.getY(), targetPos.getZ(), 1.0);
-            return;
+        BlockPlacer.PlaceResult pr = BlockPlacer.tryPlace(steve, targetPos, blockToPlace.defaultBlockState());
+        switch (pr) {
+            case NAVIGATING -> { /* keep ticking */ }
+            case PLACED -> result = ActionResult.success("Placed " + blockToPlace.getName().getString());
+            case OCCUPIED -> result = ActionResult.failure("Position is not empty");
+            case NO_MATERIAL -> result = ActionResult.failure("No " + blockToPlace.getName().getString() + " in inventory");
         }
-
-        // Check material (skip in creative mode)
-        boolean creative = SteveConfig.CREATIVE_MODE.get();
-        if (!creative) {
-            if (!steve.hasBlock(blockToPlace, 1)) {
-                result = ActionResult.failure("No " + blockToPlace.getName().getString() + " in inventory");
-                return;
-            }
-            // Consume material from inventory
-            steve.removeBlockFromInventory(blockToPlace, 1);
-        }
-
-        BlockState currentState = steve.level().getBlockState(targetPos);
-        if (!currentState.isAir() && !currentState.liquid()) {
-            result = ActionResult.failure("Position is not empty");
-            return;
-        }
-
-        steve.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(blockToPlace.asItem()));
-        steve.swing(InteractionHand.MAIN_HAND, true);
-
-        steve.level().setBlock(targetPos, blockToPlace.defaultBlockState(), 3);
-        result = ActionResult.success("Placed " + blockToPlace.getName().getString());
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.steve.ai.action;
 
 import com.steve.ai.SteveMod;
 import com.steve.ai.action.actions.*;
+import com.steve.ai.action.plan.BuildProject;
+import com.steve.ai.action.plan.PlanBuildAction;
 import com.steve.ai.di.ServiceContainer;
 import com.steve.ai.di.SimpleServiceContainer;
 import com.steve.ai.event.EventBus;
@@ -70,8 +72,10 @@ public class ActionExecutor {
         interceptorChain.addInterceptor(new MetricsInterceptor());
         interceptorChain.addInterceptor(new EventPublishingInterceptor(eventBus, steve.getSteveName()));
 
-        // Build action context
+        // Build action context — register self so CoreActionsPlugin can inject
+        // ActionExecutor into PlanBuildAction via ctx.getService(ActionExecutor.class)
         ServiceContainer container = new SimpleServiceContainer();
+        container.register(ActionExecutor.class, this);
         this.actionContext = ActionContext.builder()
             .serviceContainer(container)
             .eventBus(eventBus)
@@ -232,7 +236,7 @@ public class ActionExecutor {
                             steve.getSteveName(), task.getAction());
                         String provider = SteveConfig.AI_PROVIDER.get().toLowerCase();
                         reactAgent.feedObservation(
-                            "Invalid action: '" + task.getAction() + "'. Allowed: pathfind, mine, place, craft, attack, follow, gather, build, mcp",
+                            "Invalid action: '" + task.getAction() + "'. Allowed: " + ActionRegistry.getInstance().getActionsAsList(),
                             getTaskPlanner().getAsyncClient(provider), reactBaseParams);
                     } else {
                         executeTask(task);
@@ -291,54 +295,15 @@ public class ActionExecutor {
      */
     private BaseAction createAction(Task task) {
         String actionType = task.getAction();
-
-        // Try registry-based creation first (plugin architecture)
         ActionRegistry registry = ActionRegistry.getInstance();
-        if (registry.hasAction(actionType)) {
-            BaseAction action = registry.createAction(actionType, steve, task, actionContext);
-            if (action != null) {
-                SteveMod.LOGGER.debug("Created action '{}' via registry (plugin: {})",
-                    actionType, registry.getPluginForAction(actionType));
-                return action;
-            }
+        BaseAction action = registry.createAction(actionType, steve, task, actionContext);
+        if (action != null) {
+            SteveMod.LOGGER.debug("Created action '{}' via registry (plugin: {})",
+                actionType, registry.getPluginForAction(actionType));
+        } else {
+            SteveMod.LOGGER.warn("Unknown action type: {}", actionType);
         }
-
-        // Fallback to legacy switch statement for backward compatibility
-        SteveMod.LOGGER.debug("Using legacy fallback for action: {}", actionType);
-        return createActionLegacy(task);
-    }
-
-    /**
-     * Legacy action creation using switch statement.
-     *
-     * <p>Kept for backward compatibility during migration to plugin system.
-     * Will be removed in a future version once all actions are registered
-     * via plugins.</p>
-     *
-     * @param task Task containing action type and parameters
-     * @return Created action, or null if unknown
-     * @deprecated Use ActionRegistry instead
-     */
-    @Deprecated
-    private BaseAction createActionLegacy(Task task) {
-        return switch (task.getAction()) {
-            case "pathfind" -> new PathfindAction(steve, task);
-            case "mine" -> new MineBlockAction(steve, task);
-            case "place" -> new PlaceBlockAction(steve, task);
-            case "craft" -> new CraftItemAction(steve, task);
-            case "attack" -> new CombatAction(steve, task);
-            case "follow" -> new FollowPlayerAction(steve, task);
-            case "gather" -> new GatherResourceAction(steve, task);
-            // Intercept "build" -> PlanBuildAction (four-phase plan-then-build workflow).
-            // The plan action loads NBT, archives design to mempalace, and waits for
-            // player /steve approve before any blocks are placed.
-            case "build" -> new PlanBuildAction(steve, task, this);
-            case "mcp" -> new MCPAction(steve, task);
-            default -> {
-                SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
-                yield null;
-            }
-        };
+        return action;
     }
 
     public void stopCurrentAction() {
@@ -387,7 +352,7 @@ public class ActionExecutor {
     /**
      * Get the active build project, or null if no PlanBuildAction is in flight.
      */
-    public com.steve.ai.action.BuildProject getActiveBuildProject() {
+    public com.steve.ai.action.plan.BuildProject getActiveBuildProject() {
         if (currentAction instanceof PlanBuildAction plan) {
             return plan.getProject();
         }

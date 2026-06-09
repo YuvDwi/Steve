@@ -85,7 +85,7 @@ public class ActionRegistry {
      * @throws IllegalArgumentException if actionName or factory is null
      */
     public void register(String actionName, ActionFactory factory) {
-        register(actionName, factory, 0, "unknown");
+        register(actionName, null, factory, 0, "unknown");
     }
 
     /**
@@ -102,6 +102,10 @@ public class ActionRegistry {
      * @throws IllegalArgumentException if actionName or factory is null
      */
     public void register(String actionName, ActionFactory factory, int priority, String pluginId) {
+        register(actionName, null, factory, priority, pluginId);
+    }
+
+    public void register(String actionName, ActionSchema schema, ActionFactory factory, int priority, String pluginId) {
         if (actionName == null || actionName.isBlank()) {
             throw new IllegalArgumentException("Action name cannot be null or blank");
         }
@@ -116,15 +120,14 @@ public class ActionRegistry {
                 LOGGER.info("Registered action '{}' from plugin '{}' (priority: {})",
                     normalizedName, pluginId, priority);
                 actionToPlugin.put(normalizedName, pluginId);
-                return new FactoryEntry(factory, priority, pluginId);
+                return new FactoryEntry(factory, priority, pluginId, schema);
             }
 
-            // Conflict resolution: higher priority wins
             if (priority > existing.priority) {
                 LOGGER.info("Action '{}' overridden by plugin '{}' (priority {} > {})",
                     normalizedName, pluginId, priority, existing.priority);
                 actionToPlugin.put(normalizedName, pluginId);
-                return new FactoryEntry(factory, priority, pluginId);
+                return new FactoryEntry(factory, priority, pluginId, schema);
             } else if (priority == existing.priority) {
                 LOGGER.warn("Action '{}' already registered by '{}' with same priority, keeping existing",
                     normalizedName, existing.pluginId);
@@ -252,6 +255,24 @@ public class ActionRegistry {
         return String.join(", ", getRegisteredActions());
     }
 
+    public ActionSchema getSchema(String actionName) {
+        if (actionName == null) return null;
+        FactoryEntry entry = factories.get(actionName.toLowerCase().trim());
+        return entry != null ? entry.schema : null;
+    }
+
+    public java.util.List<ActionSchema> getAllSchemas() {
+        java.util.List<ActionSchema> result = new java.util.ArrayList<>();
+        for (FactoryEntry e : factories.values()) {
+            if (e.schema != null) result.add(e.schema);
+        }
+        return result;
+    }
+
+    public String generatePromptSection() {
+        return ActionSchema.generatePromptSection(getAllSchemas());
+    }
+
     /**
      * Internal entry storing factory with metadata.
      */
@@ -259,11 +280,13 @@ public class ActionRegistry {
         final ActionFactory factory;
         final int priority;
         final String pluginId;
+        final ActionSchema schema;
 
-        FactoryEntry(ActionFactory factory, int priority, String pluginId) {
+        FactoryEntry(ActionFactory factory, int priority, String pluginId, ActionSchema schema) {
             this.factory = factory;
             this.priority = priority;
             this.pluginId = pluginId;
+            this.schema = schema;
         }
     }
 }

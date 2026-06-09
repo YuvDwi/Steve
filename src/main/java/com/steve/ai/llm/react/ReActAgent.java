@@ -22,8 +22,9 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class ReActAgent {
 
-    private static final String ALLOWED_ACTIONS =
-        "attack, build, mine, follow, pathfind, gather, craft, mcp";
+    private static String allowedActionsString() {
+        return com.steve.ai.plugin.ActionRegistry.getInstance().getActionsAsList();
+    }
 
     private final SteveEntity steve;
     private final String originalCommand;
@@ -162,7 +163,7 @@ public class ReActAgent {
 
                 var task = step.getTasks().get(0);
                 if (!isAllowedAction(task.getAction())) {
-                    feedObservationInternal("Invalid action: '" + task.getAction() + "'. Allowed: " + ALLOWED_ACTIONS);
+                    feedObservationInternal("Invalid action: '" + task.getAction() + "'. Allowed: " + allowedActionsString());
                     scheduleNext(client, baseParams);
                     return;
                 }
@@ -268,10 +269,7 @@ public class ReActAgent {
 
     private boolean isAllowedAction(String action) {
         if (action == null) return false;
-        for (String a : ALLOWED_ACTIONS.split(", ")) {
-            if (a.equals(action)) return true;
-        }
-        return false;
+        return com.steve.ai.plugin.ActionRegistry.getInstance().hasAction(action);
     }
 
     private static String truncate(String s, int max) {

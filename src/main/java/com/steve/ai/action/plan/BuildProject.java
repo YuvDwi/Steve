@@ -1,4 +1,4 @@
-package com.steve.ai.action;
+package com.steve.ai.action.plan;
 
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.llm.react.BuildPhase;

@@ -4,7 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.steve.ai.SteveMod;
-import com.steve.ai.action.BuildProject;
+import com.steve.ai.action.plan.BuildProject;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.dashboard.PlanDashboardServer;
 import com.steve.ai.entity.SteveEntity;

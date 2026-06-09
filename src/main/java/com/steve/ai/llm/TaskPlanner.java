@@ -77,23 +77,13 @@ public class TaskPlanner {
     }
 
     public boolean validateTask(Task task) {
-        String action = task.getAction();
-
-        return switch (action) {
-            case "pathfind" -> task.hasParameters("x", "y", "z");
-            case "mine" -> task.hasParameters("block", "quantity");
-            case "place" -> task.hasParameters("block", "x", "y", "z");
-            case "craft" -> task.hasParameters("item", "quantity");
-            case "attack" -> task.hasParameters("target");
-            case "follow" -> task.hasParameters("player");
-            case "gather" -> task.hasParameters("resource", "quantity");
-            case "build" -> task.hasParameters("structure");
-            case "mcp" -> task.hasParameters("tool");
-            default -> {
-                SteveMod.LOGGER.warn("Unknown action type: {}", action);
-                yield false;
-            }
-        };
+        com.steve.ai.plugin.ActionSchema schema =
+            com.steve.ai.plugin.ActionRegistry.getInstance().getSchema(task.getAction());
+        if (schema == null) {
+            SteveMod.LOGGER.warn("Unknown action type: {}", task.getAction());
+            return false;
+        }
+        return schema.validate(task);
     }
 
     public List<Task> validateAndFilterTasks(List<Task> tasks) {

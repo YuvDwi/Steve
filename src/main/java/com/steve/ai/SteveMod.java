@@ -10,6 +10,7 @@ import com.steve.ai.event.EventBus;
 import com.steve.ai.event.SimpleEventBus;
 import com.steve.ai.event.plan.PlanEvent;
 import com.steve.ai.mcp.MCPToolRegistry;
+import com.steve.ai.memory.KnowledgeBootstrapper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.common.MinecraftForge;
@@ -83,6 +84,7 @@ public class SteveMod {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         MCPToolRegistry.init();
+        KnowledgeBootstrapper.syncLocalKnowledgeToMempalace();
         server = event.getServer();
     }
 
