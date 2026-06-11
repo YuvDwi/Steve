@@ -3,7 +3,6 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 version = '1.0.0'
@@ -51,36 +50,26 @@ repositories {
     mavenCentral()
 }
 
-// Libraries that must be bundled INTO the mod jar so they are present at runtime
-// in a real Minecraft install (Forge does not provide them). 'shade' also feeds the
-// compile/runtime classpath via implementation.extendsFrom below.
-configurations {
-    shade
-    implementation.extendsFrom shade
-}
-
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
 
     // HTTP client - Using Java 11+ built-in HttpClient (no external dependencies needed!)
     // JSON parsing - Minecraft already includes Gson
 
-    // GraalVM for JavaScript code execution engine.
-    // NOT bundled (very large, and not used on the runtime agent path).
+    // GraalVM for JavaScript code execution engine
     implementation 'org.graalvm.polyglot:polyglot:23.1.0'
     implementation 'org.graalvm.polyglot:js:23.1.0'
 
-    // Resilience4j for fault tolerance (circuit breaker, retry, rate limiting, bulkhead)
-    shade 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
-    shade 'io.github.resilience4j:resilience4j-retry:2.1.0'
-    shade 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
-    shade 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
-
-    // Caffeine cache for LLM response caching
-    shade 'com.github.ben-manes.caffeine:caffeine:3.1.8'
-
-    // Apache Commons for SHA-256 hashing (cache keys)
-    shade 'commons-codec:commons-codec:1.16.0'
+    // Resilience4j / Caffeine / commons-codec are compile-only conveniences for the
+    // (currently unused) resilience+cache classes. They are NOT loaded at runtime:
+    // TaskPlanner uses the plain async HTTP clients directly, because Forge's module
+    // classloader does not place these libraries on the runtime classpath.
+    compileOnly 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-retry:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+    compileOnly 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    compileOnly 'commons-codec:commons-codec:1.16.0'
 
     // JUnit 5 for testing
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
@@ -91,17 +80,7 @@ test {
     useJUnitPlatform()
 }
 
-// The plain 'jar' (no bundled libs) is kept as an internal 'slim' artifact.
 tasks.named('jar', Jar).configure {
-    archiveClassifier = 'slim'
-}
-
-// The shadow jar bundles the runtime libraries and becomes the actual mod jar
-// (default classifier). It must be reobfuscated like a normal Forge jar.
-tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configure {
-    archiveClassifier = ''
-    configurations = [project.configurations.shade]
-
     manifest {
         attributes([
             'Specification-Title': 'Steve AI Mod',
@@ -113,25 +92,13 @@ tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.Shadow
         ])
     }
 
-    // Strip signatures / module descriptors that are invalid inside a fat jar
-    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'module-info.class'
-
-    finalizedBy 'reobfShadowJar'
-}
-
-reobf {
-    shadowJar {}
-}
-
-// Ensure `build`/`assemble` produce the bundled mod jar
-tasks.named('assemble').configure {
-    dependsOn tasks.named('shadowJar')
+    finalizedBy 'reobfJar'
 }
 
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifact tasks.named('shadowJar')
+            artifact jar
         }
     }
     repositories {
