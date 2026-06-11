@@ -41,10 +41,11 @@ public class ActionExecutor {
     private int ticksSinceLastAction;
     private BaseAction idleFollowAction;  // Follow player when idle
 
-    // NEW: Async planning support (non-blocking LLM calls)
-    private CompletableFuture<ResponseParser.ParsedResponse> planningFuture;
-    private boolean isPlanning = false;
-    private String pendingCommand;  // Store command while planning
+    // NEW: Async planning support (non-blocking LLM calls).
+    // volatile: completion callbacks run on a pool thread; tick() reads on the server thread.
+    private volatile CompletableFuture<ResponseParser.ParsedResponse> planningFuture;
+    private volatile boolean isPlanning = false;
+    private volatile String pendingCommand;  // Store command while planning
 
     // NEW: Plugin architecture components
     private final ActionContext actionContext;
