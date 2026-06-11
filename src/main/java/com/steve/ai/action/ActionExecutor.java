@@ -211,6 +211,10 @@ public class ActionExecutor {
     private void sendToGUI(String steveName, String message) {
         if (steve.level().isClientSide) {
             com.steve.ai.client.SteveGUI.addSteveMessage(steveName, message);
+        } else {
+            // The executor runs server-side, but the panel is a client GUI; forward the
+            // message over the network so the player actually sees it.
+            com.steve.ai.network.SteveNetwork.sendMessageToAll(steveName, message);
         }
     }
 

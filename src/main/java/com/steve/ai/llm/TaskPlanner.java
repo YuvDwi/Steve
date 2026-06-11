@@ -42,10 +42,17 @@ public class TaskPlanner {
         int maxTokens = SteveConfig.MAX_TOKENS.get();
         double temperature = SteveConfig.TEMPERATURE.get();
 
+        // Use the configured model for Gemini when one is set (gemini-1.5-flash is
+        // deprecated/retired on the API). Falls back to a current Gemini model if the
+        // shared config still holds a non-Gemini (e.g. OpenAI) model name.
+        String geminiModel = (model != null && model.toLowerCase().startsWith("gemini"))
+            ? model
+            : "gemini-2.5-flash";
+
         // Create base async clients
         AsyncLLMClient baseOpenAI = new AsyncOpenAIClient(apiKey, model, maxTokens, temperature);
         AsyncLLMClient baseGroq = new AsyncGroqClient(apiKey, "llama-3.1-8b-instant", 500, temperature);
-        AsyncLLMClient baseGemini = new AsyncGeminiClient(apiKey, "gemini-1.5-flash", maxTokens, temperature);
+        AsyncLLMClient baseGemini = new AsyncGeminiClient(apiKey, geminiModel, maxTokens, temperature);
 
         // Wrap with resilience patterns
         this.asyncOpenAIClient = new ResilientLLMClient(baseOpenAI, llmCache, fallbackHandler);
