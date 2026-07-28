@@ -52,6 +52,8 @@ public class AsyncGeminiClient implements AsyncLLMClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncGeminiClient.class);
     private static final String GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
     private static final String PROVIDER_ID = "gemini";
+    /** Used when no valid Gemini model is configured (e.g. an OpenAI model name leaked in). */
+    private static final String DEFAULT_MODEL = "gemini-2.5-flash";
 
     private final HttpClient httpClient;
     private final String apiKey;
@@ -90,8 +92,13 @@ public class AsyncGeminiClient implements AsyncLLMClient {
     public CompletableFuture<LLMResponse> sendAsync(String prompt, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();
 
-        String requestBody = buildRequestBody(prompt, params);
-        String urlWithKey = GEMINI_API_BASE + model + ":generateContent?key=" + apiKey;
+        // Honor the model from the request params (set from config) instead of the
+        // value baked in at construction time. This is what makes the configured
+        // model (e.g. gemini-2.5-flash) actually take effect.
+        String modelToUse = resolveModel(params);
+
+        String requestBody = buildRequestBody(prompt, params, modelToUse);
+        String urlWithKey = GEMINI_API_BASE + modelToUse + ":generateContent?key=" + apiKey;
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(urlWithKey))
@@ -121,8 +128,32 @@ public class AsyncGeminiClient implements AsyncLLMClient {
                     );
                 }
 
-                return parseResponse(response.body(), latencyMs);
+                return parseResponse(response.body(), latencyMs, modelToUse);
             });
+    }
+
+    /**
+     * Resolves which Gemini model to use for a request.
+     *
+     * <p>Prefers the "model" supplied in the request params (which comes from the
+     * mod config), falling back to the model set at construction time. If neither is
+     * a Gemini model (for example an OpenAI model name was left in the shared config),
+     * a sane Gemini default is used so requests don't hit a non-existent endpoint.</p>
+     *
+     * @param params Request params, possibly containing a "model" entry
+     * @return A usable Gemini model id
+     */
+    private String resolveModel(Map<String, Object> params) {
+        Object requested = params.get("model");
+        String candidate = (requested instanceof String s && !s.isBlank()) ? s : this.model;
+
+        if (candidate == null || !candidate.toLowerCase().startsWith("gemini")) {
+            LOGGER.warn("[gemini] Configured model '{}' is not a Gemini model; falling back to '{}'. "
+                + "Set [openai] model to a Gemini model (e.g. gemini-2.5-flash) in steve-common.toml.",
+                candidate, DEFAULT_MODEL);
+            return DEFAULT_MODEL;
+        }
+        return candidate;
     }
 
     /**
@@ -134,7 +165,7 @@ public class AsyncGeminiClient implements AsyncLLMClient {
      * @param params Additional parameters
      * @return JSON string
      */
-    private String buildRequestBody(String prompt, Map<String, Object> params) {
+    private String buildRequestBody(String prompt, Map<String, Object> params, String modelUsed) {
         JsonObject body = new JsonObject();
 
         // Build contents array (Gemini format)
@@ -168,6 +199,17 @@ public class AsyncGeminiClient implements AsyncLLMClient {
         generationConfig.addProperty("temperature", tempToUse);
         generationConfig.addProperty("maxOutputTokens", maxTokensToUse);
 
+        // Gemini 2.5 models enable "thinking" by default, which consumes the output token
+        // budget on hidden reasoning and can return a MAX_TOKENS response with no text.
+        // For our structured-JSON use case we disable thinking so the model spends its
+        // budget on the actual answer. (thinkingBudget=0 is supported by 2.5 Flash.)
+        if (modelUsed != null && modelUsed.toLowerCase().contains("2.5")
+                && modelUsed.toLowerCase().contains("flash")) {
+            JsonObject thinkingConfig = new JsonObject();
+            thinkingConfig.addProperty("thinkingBudget", 0);
+            generationConfig.add("thinkingConfig", thinkingConfig);
+        }
+
         body.add("generationConfig", generationConfig);
 
         return body.toString();
@@ -182,7 +224,7 @@ public class AsyncGeminiClient implements AsyncLLMClient {
      * @param latencyMs    Request latency
      * @return Parsed LLMResponse
      */
-    private LLMResponse parseResponse(String responseBody, long latencyMs) {
+    private LLMResponse parseResponse(String responseBody, long latencyMs, String modelUsed) {
         try {
             JsonObject json = JsonParser.parseString(responseBody).getAsJsonObject();
 
@@ -257,7 +299,7 @@ public class AsyncGeminiClient implements AsyncLLMClient {
 
             return LLMResponse.builder()
                 .content(text)
-                .model(model)
+                .model(modelUsed)
                 .providerId(PROVIDER_ID)
                 .latencyMs(latencyMs)
                 .tokensUsed(tokensUsed)

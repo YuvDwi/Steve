@@ -56,7 +56,9 @@ public class SteveMod {
         steveManager = new SteveManager();
     }
 
-    private void commonSetup(final FMLCommonSetupEvent event) {    }
+    private void commonSetup(final FMLCommonSetupEvent event) {
+        event.enqueueWork(com.steve.ai.network.SteveNetwork::register);
+    }
 
     private void entityAttributes(EntityAttributeCreationEvent event) {
         event.put(STEVE_ENTITY.get(), SteveEntity.createAttributes().build());

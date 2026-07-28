@@ -16,7 +16,10 @@ public class CombatAction extends BaseAction {
     private int ticksRunning;
     private int ticksStuck;
     private double lastX, lastZ;
+    private boolean everHadTarget;
+    private boolean hasAttacked;
     private static final int MAX_TICKS = 600;
+    private static final int NO_TARGET_GIVEUP_TICKS = 100; // ~5s of finding nothing before giving up
     private static final double ATTACK_RANGE = 3.5;
 
     public CombatAction(SteveEntity steve, Task task) {
@@ -46,22 +49,26 @@ public class CombatAction extends BaseAction {
         ticksRunning++;
         
         if (ticksRunning > MAX_TICKS) {
-            // Combat complete - clean up and disable invulnerability
-            steve.setInvulnerableBuilding(false);
-            steve.setSprinting(false);
-            steve.getNavigation().stop();
-            com.steve.ai.SteveMod.LOGGER.info("Steve '{}' combat complete, invulnerability disabled", 
-                steve.getSteveName());
-            result = ActionResult.success("Combat complete");
+            cleanupCombat();
+            // Report honestly: only a success if we actually hit something
+            result = hasAttacked
+                ? ActionResult.success("Combat complete")
+                : ActionResult.failure("Couldn't reach any " + targetType + " to attack");
             return;
         }
-        
+
         // Re-search for targets periodically or if current target is invalid
         if (target == null || !target.isAlive() || target.isRemoved()) {
             if (ticksRunning % 20 == 0) {
                 findTarget();
             }
             if (target == null) {
+                // Give up quickly (with feedback) if there's simply nothing of this type around,
+                // instead of standing still for the full 30-second timeout.
+                if (!everHadTarget && ticksRunning > NO_TARGET_GIVEUP_TICKS) {
+                    cleanupCombat();
+                    result = ActionResult.failure("No " + targetType + " nearby to attack");
+                }
                 return; // Keep searching
             }
         }
@@ -100,6 +107,7 @@ public class CombatAction extends BaseAction {
         
         if (distance <= ATTACK_RANGE) {
             steve.doHurtTarget(target);
+            hasAttacked = true;
             steve.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
             
             // Attack 3 times per second (every 6-7 ticks)
@@ -144,9 +152,16 @@ public class CombatAction extends BaseAction {
         
         target = nearest;
         if (target != null) {
-            com.steve.ai.SteveMod.LOGGER.info("Steve '{}' locked onto: {} at {}m", 
+            everHadTarget = true;
+            com.steve.ai.SteveMod.LOGGER.info("Steve '{}' locked onto: {} at {}m",
                 steve.getSteveName(), target.getType().toString(), (int)nearestDistance);
         }
+    }
+
+    private void cleanupCombat() {
+        steve.setInvulnerableBuilding(false);
+        steve.setSprinting(false);
+        steve.getNavigation().stop();
     }
 
     private boolean isValidTarget(LivingEntity entity) {
@@ -160,14 +175,19 @@ public class CombatAction extends BaseAction {
         }
         
         String targetLower = targetType.toLowerCase();
-        
+
         // Match ANY hostile mob
-        if (targetLower.contains("mob") || targetLower.contains("hostile") || 
+        if (targetLower.contains("mob") || targetLower.contains("hostile") ||
             targetLower.contains("monster") || targetLower.equals("any")) {
             return entity instanceof Monster;
         }
-        
-        // Match specific entity type
+
+        // Match ANY passive animal (e.g. "hunt an animal for dinner")
+        if (targetLower.contains("animal") || targetLower.contains("passive")) {
+            return entity instanceof net.minecraft.world.entity.animal.Animal;
+        }
+
+        // Match specific entity type (e.g. "cow", "pig", "sheep", "chicken")
         String entityTypeName = entity.getType().toString().toLowerCase();
         return entityTypeName.contains(targetLower);
     }

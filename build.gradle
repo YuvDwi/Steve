@@ -60,17 +60,16 @@ dependencies {
     implementation 'org.graalvm.polyglot:polyglot:23.1.0'
     implementation 'org.graalvm.polyglot:js:23.1.0'
 
-    // Resilience4j for fault tolerance (circuit breaker, retry, rate limiting, bulkhead)
-    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
-    implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
-    implementation 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
-    implementation 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
-
-    // Caffeine cache for LLM response caching
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
-
-    // Apache Commons for SHA-256 hashing (cache keys)
-    implementation 'commons-codec:commons-codec:1.16.0'
+    // Resilience4j / Caffeine / commons-codec are compile-only conveniences for the
+    // (currently unused) resilience+cache classes. They are NOT loaded at runtime:
+    // TaskPlanner uses the plain async HTTP clients directly, because Forge's module
+    // classloader does not place these libraries on the runtime classpath.
+    compileOnly 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-retry:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-ratelimiter:2.1.0'
+    compileOnly 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+    compileOnly 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    compileOnly 'commons-codec:commons-codec:1.16.0'
 
     // JUnit 5 for testing
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'

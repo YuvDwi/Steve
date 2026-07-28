@@ -17,14 +17,14 @@ public class PromptBuilder {
             {"reasoning": "brief thought", "plan": "action description", "tasks": [{"action": "type", "parameters": {...}}]}
             
             ACTIONS:
-            - attack: {"target": "hostile"} (for any mob/monster)
+            - attack: {"target": "hostile"} for monsters/threats, OR {"target": "cow"|"pig"|"sheep"|"chicken"|"animal"} when hunting animals for food/meat
             - build: {"structure": "house", "blocks": ["oak_planks", "cobblestone", "glass_pane"], "dimensions": [9, 6, 9]}
             - mine: {"block": "iron", "quantity": 8} (resources: iron, diamond, coal, gold, copper, redstone, emerald)
             - follow: {"player": "NAME"}
             - pathfind: {"x": 0, "y": 0, "z": 0}
-            
+
             RULES:
-            1. ALWAYS use "hostile" for attack target (mobs, monsters, creatures)
+            1. Use "hostile" for monsters/threats; use a specific animal (cow, pig, sheep, chicken) or "animal" when the user wants to hunt animals or get food/meat
             2. STRUCTURE OPTIONS: house, oldhouse, powerplant, castle, tower, barn, modern
             3. house/oldhouse/powerplant = pre-built NBT templates (auto-size)
             4. castle/tower/barn/modern = procedural (castle=14x10x14, tower=6x6x16, barn=12x8x14)
@@ -50,6 +50,9 @@ public class PromptBuilder {
             
             Input: "murder creeper"
             {"reasoning": "Targeting creeper", "plan": "Attack creeper", "tasks": [{"action": "attack", "parameters": {"target": "creeper"}}]}
+
+            Input: "hunt an animal for dinner"
+            {"reasoning": "Hunting an animal for food", "plan": "Hunt animal", "tasks": [{"action": "attack", "parameters": {"target": "animal"}}]}
             
             Input: "follow me"
             {"reasoning": "Player needs me", "plan": "Follow player", "tasks": [{"action": "follow", "parameters": {"player": "USE_NEARBY_PLAYER_NAME"}}]}

@@ -119,13 +119,11 @@ public class SteveCommands {
         SteveEntity steve = manager.getSteve(name);
         
         if (steve != null) {
-            // Disabled command feedback message
-            // source.sendSuccess(() -> Component.literal("Instructing " + name + ": " + command), true);
-            
-            new Thread(() -> {
-                steve.getActionExecutor().processNaturalLanguageCommand(command);
-            }).start();
-            
+            // planTasksAsync is already non-blocking (returns a future immediately), so run
+            // this directly on the server thread. Spawning a thread here caused a data race:
+            // the planning fields were written off-thread but read by the entity tick thread,
+            // so the completed plan was sometimes never consumed (panel stuck on "Thinking...").
+            steve.getActionExecutor().processNaturalLanguageCommand(command);
             return 1;
         } else {
             source.sendFailure(Component.literal("Steve not found: " + name));

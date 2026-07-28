@@ -6,7 +6,6 @@ import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.llm.async.*;
 import com.steve.ai.llm.resilience.LLMFallbackHandler;
-import com.steve.ai.llm.resilience.ResilientLLMClient;
 import com.steve.ai.memory.WorldKnowledge;
 
 import java.util.List;
@@ -19,11 +18,10 @@ public class TaskPlanner {
     private final GeminiClient geminiClient;
     private final GroqClient groqClient;
 
-    // NEW: Async resilient clients
+    // Async LLM clients (plain HTTP, no external libraries)
     private final AsyncLLMClient asyncOpenAIClient;
     private final AsyncLLMClient asyncGroqClient;
     private final AsyncLLMClient asyncGeminiClient;
-    private final LLMCache llmCache;
     private final LLMFallbackHandler fallbackHandler;
 
     public TaskPlanner() {
@@ -32,27 +30,30 @@ public class TaskPlanner {
         this.geminiClient = new GeminiClient();
         this.groqClient = new GroqClient();
 
-        // Initialize async infrastructure
-        this.llmCache = new LLMCache();
+        // Dependency-free fallback for graceful degradation when the LLM call fails
         this.fallbackHandler = new LLMFallbackHandler();
 
-        // Initialize async clients with resilience wrappers
         String apiKey = SteveConfig.OPENAI_API_KEY.get();
         String model = SteveConfig.OPENAI_MODEL.get();
         int maxTokens = SteveConfig.MAX_TOKENS.get();
         double temperature = SteveConfig.TEMPERATURE.get();
 
-        // Create base async clients
-        AsyncLLMClient baseOpenAI = new AsyncOpenAIClient(apiKey, model, maxTokens, temperature);
-        AsyncLLMClient baseGroq = new AsyncGroqClient(apiKey, "llama-3.1-8b-instant", 500, temperature);
-        AsyncLLMClient baseGemini = new AsyncGeminiClient(apiKey, "gemini-1.5-flash", maxTokens, temperature);
+        // Use the configured model for Gemini when one is set (gemini-1.5-flash is
+        // deprecated/retired on the API). Falls back to a current Gemini model if the
+        // shared config still holds a non-Gemini (e.g. OpenAI) model name.
+        String geminiModel = (model != null && model.toLowerCase().startsWith("gemini"))
+            ? model
+            : "gemini-2.5-flash";
 
-        // Wrap with resilience patterns
-        this.asyncOpenAIClient = new ResilientLLMClient(baseOpenAI, llmCache, fallbackHandler);
-        this.asyncGroqClient = new ResilientLLMClient(baseGroq, llmCache, fallbackHandler);
-        this.asyncGeminiClient = new ResilientLLMClient(baseGemini, llmCache, fallbackHandler);
+        // Plain async clients use only java.net.http + Gson, so they load reliably
+        // under Forge's module classloader. (The resilience4j/Caffeine wrappers were
+        // removed: those libraries are not on the runtime classpath and caused a
+        // NoClassDefFoundError that silently broke all planning.)
+        this.asyncOpenAIClient = new AsyncOpenAIClient(apiKey, model, maxTokens, temperature);
+        this.asyncGroqClient = new AsyncGroqClient(apiKey, "llama-3.1-8b-instant", 500, temperature);
+        this.asyncGeminiClient = new AsyncGeminiClient(apiKey, geminiModel, maxTokens, temperature);
 
-        SteveMod.LOGGER.info("TaskPlanner initialized with async resilient clients");
+        SteveMod.LOGGER.info("TaskPlanner initialized (provider={})", SteveConfig.AI_PROVIDER.get());
     }
 
     public ResponseParser.ParsedResponse planTasks(SteveEntity steve, String command) {
@@ -166,8 +167,17 @@ public class TaskPlanner {
                     return parsed;
                 })
                 .exceptionally(throwable -> {
-                    SteveMod.LOGGER.error("[Async] Error planning tasks: {}", throwable.getMessage());
-                    return null;
+                    // Graceful degradation: try a pattern-based fallback plan so the
+                    // Steve can still act when the LLM call fails (bad key, network, etc.)
+                    SteveMod.LOGGER.warn("[Async] LLM call failed ({}); using fallback plan",
+                        throwable.getMessage());
+                    try {
+                        LLMResponse fb = fallbackHandler.generateFallback(userPrompt, throwable);
+                        return ResponseParser.parseAIResponse(fb.getContent());
+                    } catch (Exception e) {
+                        SteveMod.LOGGER.error("[Async] Fallback planning also failed", e);
+                        return null;
+                    }
                 });
 
         } catch (Exception e) {
@@ -195,19 +205,10 @@ public class TaskPlanner {
     }
 
     /**
-     * Returns the LLM cache for monitoring.
-     *
-     * @return LLM cache instance
-     */
-    public LLMCache getLLMCache() {
-        return llmCache;
-    }
-
-    /**
      * Checks if the specified provider's async client is healthy.
      *
      * @param provider Provider name
-     * @return true if healthy (circuit breaker not OPEN)
+     * @return true if healthy
      */
     public boolean isProviderHealthy(String provider) {
         return getAsyncClient(provider).isHealthy();

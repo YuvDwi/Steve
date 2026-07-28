@@ -45,40 +45,35 @@ public class LLMFallbackHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LLMFallbackHandler.class);
 
-    // Pattern-based fallback responses in JSON format matching ResponseParser expectations
+    // Pattern-based fallback responses.
+    // IMPORTANT: these MUST match the schema ResponseParser/the action classes expect:
+    // each task carries its arguments under a nested "parameters" object, with the exact
+    // keys the action reads (mine -> block/quantity, build -> structure/blocks/dimensions,
+    // attack -> target, follow -> player). Otherwise the task is parsed with empty params
+    // and silently dropped.
     private static final Map<Pattern, String> PATTERN_RESPONSES = Map.of(
         // Mining patterns
         Pattern.compile("(?i).*(mine|dig|collect|gather|ore|diamond|iron|coal|stone).*"),
-        "{\"thoughts\":\"[Fallback] Mining action detected\",\"tasks\":[{\"action\":\"mine\",\"target\":\"iron_ore\",\"quantity\":10}]}",
+        "{\"reasoning\":\"[Fallback] Mining action detected\",\"plan\":\"Mine resources\",\"tasks\":[{\"action\":\"mine\",\"parameters\":{\"block\":\"iron\",\"quantity\":10}}]}",
 
         // Building patterns
         Pattern.compile("(?i).*(build|construct|create|make).*(house|home|shelter|structure|base).*"),
-        "{\"thoughts\":\"[Fallback] Building action detected\",\"tasks\":[{\"action\":\"build\",\"structure\":\"house\",\"size\":\"small\"}]}",
+        "{\"reasoning\":\"[Fallback] Building action detected\",\"plan\":\"Build a house\",\"tasks\":[{\"action\":\"build\",\"parameters\":{\"structure\":\"house\",\"blocks\":[\"oak_planks\",\"cobblestone\",\"glass_pane\"],\"dimensions\":[9,6,9]}}]}",
 
         // Combat patterns
         Pattern.compile("(?i).*(attack|fight|kill|destroy|hostile|monster|zombie|skeleton|creeper).*"),
-        "{\"thoughts\":\"[Fallback] Combat action detected\",\"tasks\":[{\"action\":\"attack\",\"target\":\"nearest_hostile\"}]}",
+        "{\"reasoning\":\"[Fallback] Combat action detected\",\"plan\":\"Attack hostiles\",\"tasks\":[{\"action\":\"attack\",\"parameters\":{\"target\":\"hostile\"}}]}",
 
-        // Follow patterns
-        Pattern.compile("(?i).*(follow|come|here|with me|accompany).*"),
-        "{\"thoughts\":\"[Fallback] Follow action detected\",\"tasks\":[{\"action\":\"follow\",\"target\":\"player\"}]}",
-
-        // Movement patterns
-        Pattern.compile("(?i).*(go to|move to|walk to|travel|path|navigate).*"),
-        "{\"thoughts\":\"[Fallback] Movement action detected\",\"tasks\":[{\"action\":\"pathfind\",\"target\":\"player\"}]}",
-
-        // Placement patterns
-        Pattern.compile("(?i).*(place|put|set).*(block|torch|door).*"),
-        "{\"thoughts\":\"[Fallback] Placement action detected\",\"tasks\":[{\"action\":\"place_block\",\"block\":\"torch\",\"position\":\"here\"}]}",
-
-        // Stop patterns
-        Pattern.compile("(?i).*(stop|halt|cancel|wait|pause|stay).*"),
-        "{\"thoughts\":\"[Fallback] Stop action detected\",\"tasks\":[{\"action\":\"wait\",\"duration\":5}]}"
+        // Follow / movement patterns (pathfind needs coordinates we can't infer, so
+        // approximate "come here / go to" with following the nearest player)
+        Pattern.compile("(?i).*(follow|come|here|with me|accompany|go to|move to|walk to|navigate).*"),
+        "{\"reasoning\":\"[Fallback] Follow action detected\",\"plan\":\"Follow player\",\"tasks\":[{\"action\":\"follow\",\"parameters\":{\"player\":\"nearest\"}}]}"
     );
 
-    // Default response when no pattern matches
+    // Default response when no pattern matches: no tasks, so the Steve simply idles
+    // (follows the player) instead of attempting an unsupported action.
     private static final String DEFAULT_RESPONSE =
-        "{\"thoughts\":\"[Fallback] No pattern matched, waiting\",\"tasks\":[{\"action\":\"wait\",\"duration\":5}]}";
+        "{\"reasoning\":\"[Fallback] No pattern matched\",\"plan\":\"Standing by\",\"tasks\":[]}";
 
     /**
      * Generates a fallback response based on pattern matching.
