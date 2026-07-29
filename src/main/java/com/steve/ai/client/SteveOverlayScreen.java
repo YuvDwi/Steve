@@ -27,8 +27,10 @@ public class SteveOverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // K key to close
-        if (keyCode == 75 && !hasShiftDown() && !hasControlDown() && !hasAltDown()) { // K
+        // Check if the pressed key matches the configured TOGGLE_GUI key binding
+        // This now respects user's key configuration instead of hardcoded K key
+        if (KeyBindings.TOGGLE_GUI != null &&
+                KeyBindings.TOGGLE_GUI.matches(keyCode, scanCode) && !hasShiftDown() && !hasControlDown() && !hasAltDown()) { // K
             SteveGUI.toggle();
             if (minecraft != null) {
                 minecraft.setScreen(null);
