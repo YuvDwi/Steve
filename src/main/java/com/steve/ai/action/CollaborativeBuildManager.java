@@ -199,10 +199,14 @@ public class CollaborativeBuildManager {
         BlockPlacement block = section.getNextBlock();
         
         if (block == null) {
+            // This Steve's section is complete - reassign them to another
+            // section that still needs work (previously this re-queried the
+            // same finished section and always returned null, leaving the
+            // Steve stuck idle instead of helping elsewhere).
+            sectionIndex = assignSteveToSection(build, steveName);
             if (sectionIndex != null) {
                 section = build.sections.get(sectionIndex);
                 block = section.getNextBlock();
-                if (block != null) {                }
             }
         }
         
